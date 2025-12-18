@@ -1,27 +1,27 @@
 import Link from "next/link";
-import { Shield, Sparkles, Workflow } from "lucide-react";
+import { Target, Brain, BarChart3 } from "lucide-react";
 
 const roleCards = [
   {
-    title: "Players",
-    copy: "Personalized readiness, match prep, and clear recovery plans with live progression.",
-    points: ["Daily readiness score", "Velocity + load balance", "Health guardrails"],
-    icon: Sparkles,
-    cta: "View player dashboard",
+    title: "Testing",
+    copy: "Run 13 repeatable tests to collect 39 objective data points per player. Simple, consistent measurements.",
+    points: ["13 standardized tests", "39 data points collected", "Track progress over time"],
+    icon: Target,
+    cta: "View testing guide",
   },
   {
-    title: "Coaches",
-    copy: "Squad availability, tactical priorities, and instant session templates informed by data.",
-    points: ["Availability heatmap", "Session builder", "Post-match reports"],
-    icon: Workflow,
-    cta: "See coach tools",
+    title: "Player DNA",
+    copy: "Raw test scores normalized into structured profiles showing strengths and weaknesses across four main traits.",
+    points: ["4-trait profile", "39 data points tracked", "Week-over-week tracking"],
+    icon: Brain,
+    cta: "See Player DNA",
   },
   {
-    title: "Admins",
-    copy: "Governance, compliance, and permissions with rock-solid audit trails and controls.",
-    points: ["Role-based access", "Risk/compliance flags", "Secure exports"],
-    icon: Shield,
-    cta: "Open admin console",
+    title: "AI Session Plans",
+    copy: "AI analyzes Player DNA and recent changes to suggest targeted practice plans and small group focuses.",
+    points: ["Targeted drills", "Small group pairings", "Focus areas identified"],
+    icon: BarChart3,
+    cta: "View AI plans",
   },
 ];
 

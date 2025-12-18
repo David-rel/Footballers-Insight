@@ -2,36 +2,36 @@ import SectionHeader from "@/components/ui/SectionHeader";
 import SpotlightTabs from "@/components/features/SpotlightTabs";
 import AccessRoleCards from "@/components/features/AccessRoleCards";
 
-const roleDetails = [
+const features = [
   {
-    role: "Player",
-    actions: ["Personal readiness scoring", "Recovery protocol guidance", "Performance trends"],
-    security: "Private to player with coach overview, export controls enabled.",
+    title: "Test Tracking",
+    actions: ["13 standardized tests", "39 data points per player", "Progress over time"],
+    detail: "Simple, repeatable tests that measure power, technique, mobility, and decision-making consistently.",
   },
   {
-    role: "Coach",
-    actions: ["Squad availability", "Session planner", "Tactical focus with risk flags"],
-    security: "Role-scoped to staff groups, session approvals, audit on edits.",
+    title: "Player DNA",
+    actions: ["4-trait profiles", "39 data points tracked", "Visual progress charts"],
+    detail: "Raw test scores normalized into structured profiles showing strengths and weaknesses across four main traits.",
   },
   {
-    role: "Admin",
-    actions: ["Role-based access", "Compliance workflows", "Data retention + exports"],
-    security: "SSO, SCIM, and full audit logging with policy-based controls.",
+    title: "AI Session Plans",
+    actions: ["Targeted drills", "Small group suggestions", "Focus area identification"],
+    detail: "AI analyzes Player DNA and suggests practice plans based on where each player needs help most.",
   },
 ];
 
 const components = [
   {
-    title: "Match Readiness",
-    desc: "Availability and readiness in a single card with freshness indicators and alerts.",
+    title: "Test Dashboard",
+    desc: "View all 13 test results, track progress over time, and see improvements across four main traits.",
   },
   {
-    title: "Training Week",
-    desc: "Microcycle planner aligned to load targets and upcoming fixtures.",
+    title: "Player DNA Map",
+    desc: "Visual representation of each player's complete profile showing strengths and areas for development.",
   },
   {
-    title: "Permissions Matrix",
-    desc: "Clear ownership for data, exports, and workflow approvals per role.",
+    title: "AI Practice Planner",
+    desc: "Generated session plans with targeted drills and small group focuses based on objective test data.",
   },
 ];
 
@@ -40,30 +40,28 @@ export default function PlatformPage() {
     <div className="relative mx-auto max-w-6xl space-y-12 px-6 py-14">
       <SectionHeader
         eyebrow="Platform"
-        title="Role-driven, action-ready"
-        subtitle="Dynamic experiences for players, coaches, and admins. Everything shares one source of truth."
+        title="Testing to training plans"
+        subtitle="From objective test data to AI-generated session plans. Everything connected in one platform."
       />
 
       <SpotlightTabs />
 
       <section className="space-y-6">
-        <SectionHeader eyebrow="Roles" title="Tailored experiences" align="left" />
+        <SectionHeader eyebrow="Features" title="Core capabilities" align="left" />
         <div className="grid gap-6 md:grid-cols-3">
-          {roleDetails.map((role) => (
-            <div key={role.role} className="rounded-2xl border border-white/10 bg-black/60 p-5 text-white shadow-[0_15px_50px_rgba(0,0,0,0.35)]">
-              <p className="text-xs uppercase tracking-[0.2em] text-[#e3ca76]">{role.role}</p>
-              <h3 className="mt-2 text-xl font-semibold">What you see</h3>
+          {features.map((feature) => (
+            <div key={feature.title} className="rounded-2xl border border-white/10 bg-black/60 p-5 text-white shadow-[0_15px_50px_rgba(0,0,0,0.35)]">
+              <p className="text-xs uppercase tracking-[0.2em] text-[#e3ca76]">{feature.title}</p>
+              <h3 className="mt-2 text-xl font-semibold">What it does</h3>
+              <p className="mt-2 text-sm text-white/70">{feature.detail}</p>
               <ul className="mt-3 space-y-2 text-sm text-white/70">
-                {role.actions.map((action) => (
+                {feature.actions.map((action) => (
                   <li key={action} className="flex items-center gap-2">
                     <span className="h-1.5 w-1.5 rounded-full bg-[#e3ca76]"></span>
                     {action}
                   </li>
                 ))}
               </ul>
-              <div className="mt-4 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/70">
-                Security: {role.security}
-              </div>
             </div>
           ))}
         </div>

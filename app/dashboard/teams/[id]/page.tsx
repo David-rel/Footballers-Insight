@@ -1,0 +1,599 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter, useParams } from "next/navigation";
+import {
+  ArrowLeft,
+  Edit,
+  Trash2,
+  Users,
+  BookOpen,
+  User,
+  Calendar,
+  Image as ImageIcon,
+  Plus,
+  X,
+  Mail,
+  CheckCircle,
+  Clock,
+} from "lucide-react";
+import Button from "@/components/ui/Button";
+
+interface Curriculum {
+  id: string;
+  name: string;
+  description: string | null;
+  tests: string[];
+}
+
+interface Coach {
+  id: string;
+  name: string;
+  email: string;
+}
+
+interface Team {
+  id: string;
+  name: string;
+  description: string | null;
+  imageUrl: string | null;
+  curriculumId: string | null;
+  curriculum: Curriculum | null;
+  coachId: string | null;
+  coach: Coach | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface Player {
+  id: string;
+  userId: string;
+  teamId: string;
+  firstName: string;
+  lastName: string;
+  dob: string | null;
+  ageGroup: string | null;
+  gender: string | null;
+  dominantFoot: string | null;
+  notes: string | null;
+  email: string;
+  emailVerified: boolean;
+  onboarded: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export default function TeamDetailPage() {
+  const router = useRouter();
+  const params = useParams();
+  const teamId = params.id as string;
+
+  const [team, setTeam] = useState<Team | null>(null);
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [showAddPlayerModal, setShowAddPlayerModal] = useState(false);
+  const [addingPlayer, setAddingPlayer] = useState(false);
+  const [playerForm, setPlayerForm] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+  });
+
+  useEffect(() => {
+    fetchTeam();
+    fetchUserRole();
+    fetchPlayers();
+  }, [teamId]);
+
+  async function fetchUserRole() {
+    try {
+      const response = await fetch("/api/user/profile");
+      if (response.ok) {
+        const data = await response.json();
+        setUserRole(data.user.role);
+      }
+    } catch (error) {
+      console.error("Failed to fetch user role:", error);
+    }
+  }
+
+  async function fetchTeam() {
+    try {
+      setLoading(true);
+      const response = await fetch("/api/teams");
+      if (response.ok) {
+        const data = await response.json();
+        const foundTeam = data.teams.find((t: Team) => t.id === teamId);
+        if (foundTeam) {
+          setTeam(foundTeam);
+        } else {
+          // Team not found or not accessible
+          router.push("/dashboard/teams");
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch team:", error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function fetchPlayers() {
+    try {
+      const response = await fetch(`/api/teams/${teamId}/players`);
+      if (response.ok) {
+        const data = await response.json();
+        setPlayers(data.players);
+      }
+    } catch (error) {
+      console.error("Failed to fetch players:", error);
+    }
+  }
+
+  async function handleAddPlayer() {
+    try {
+      setAddingPlayer(true);
+      const response = await fetch(`/api/teams/${teamId}/players`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          firstName: playerForm.firstName,
+          lastName: playerForm.lastName,
+          email: playerForm.email,
+        }),
+      });
+
+      if (response.ok) {
+        await fetchPlayers();
+        setShowAddPlayerModal(false);
+        setPlayerForm({ firstName: "", lastName: "", email: "" });
+      } else {
+        const error = await response.json();
+        alert(error.error || "Failed to add player");
+      }
+    } catch (error) {
+      console.error("Failed to add player:", error);
+      alert("Failed to add player");
+    } finally {
+      setAddingPlayer(false);
+    }
+  }
+
+  async function handleDelete() {
+    try {
+      const response = await fetch(`/api/teams/${teamId}`, {
+        method: "DELETE",
+      });
+
+      if (response.ok) {
+        router.push("/dashboard/teams");
+      } else {
+        const error = await response.json();
+        alert(error.error || "Failed to delete team");
+      }
+    } catch (error) {
+      console.error("Failed to delete team:", error);
+      alert("Failed to delete team");
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <p className="text-white/70">Loading...</p>
+      </div>
+    );
+  }
+
+  if (!team) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center">
+          <p className="text-white/70 text-lg mb-4">Team not found</p>
+          <Button onClick={() => router.push("/dashboard/teams")}>
+            Back to Teams
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-7xl mx-auto">
+      {/* Header */}
+      <div className="mb-6">
+        <button
+          onClick={() => router.push("/dashboard/teams")}
+          className="flex items-center gap-2 text-white/70 hover:text-white mb-4 transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>Back to Teams</span>
+        </button>
+
+        <div className="flex items-start justify-between">
+          <div className="flex-1">
+            <h1 className="text-3xl font-bold text-white mb-2">{team.name}</h1>
+            {team.description && (
+              <p className="text-white/70 text-lg">{team.description}</p>
+            )}
+          </div>
+          {userRole !== "coach" && (
+            <div className="flex items-center gap-3">
+              <Button
+                onClick={() => router.push(`/dashboard/teams/${teamId}/edit`)}
+                variant="outline"
+                className="flex items-center gap-2"
+              >
+                <Edit className="w-4 h-4" />
+                <span>Edit Team</span>
+              </Button>
+              <Button
+                onClick={() => setDeleteConfirm(true)}
+                variant="outline"
+                className="flex items-center gap-2 border-red-500/50 text-red-400 hover:bg-red-500/10"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Delete</span>
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Banner Image */}
+      {team.imageUrl && (
+        <div className="rounded-2xl overflow-hidden mb-6 border border-white/10">
+          <div className="h-64 bg-gradient-to-br from-[#e3ca76]/20 to-[#a78443]/20 relative">
+            <img
+              src={team.imageUrl}
+              alt={team.name}
+              className="w-full h-full object-cover"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Team Information Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        {/* Coach Card */}
+        <div className="rounded-2xl border border-white/10 bg-black/60 p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-12 h-12 rounded-lg bg-[#e3ca76]/20 flex items-center justify-center border border-[#e3ca76]/30">
+              <User className="w-6 h-6 text-[#e3ca76]" />
+            </div>
+            <div>
+              <h3 className="text-sm font-medium text-white/70">Coach</h3>
+              {team.coach ? (
+                <p className="text-xl font-bold text-white">{team.coach.name}</p>
+              ) : (
+                <p className="text-white/50">No coach assigned</p>
+              )}
+            </div>
+          </div>
+          {team.coach && (
+            <div className="text-white/70 text-sm">
+              <p>{team.coach.email}</p>
+            </div>
+          )}
+        </div>
+
+        {/* Curriculum Card */}
+        <div className="rounded-2xl border border-white/10 bg-black/60 p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-12 h-12 rounded-lg bg-[#e3ca76]/20 flex items-center justify-center border border-[#e3ca76]/30">
+              <BookOpen className="w-6 h-6 text-[#e3ca76]" />
+            </div>
+            <div>
+              <h3 className="text-sm font-medium text-white/70">Curriculum</h3>
+              {team.curriculum ? (
+                <p className="text-xl font-bold text-white">
+                  {team.curriculum.name}
+                </p>
+              ) : (
+                <p className="text-white/50">No curriculum assigned</p>
+              )}
+            </div>
+          </div>
+          {team.curriculum?.description && (
+            <p className="text-white/70 text-sm mb-3">
+              {team.curriculum.description}
+            </p>
+          )}
+          {team.curriculum && team.curriculum.tests.length > 0 && (
+            <div>
+              <p className="text-xs text-white/50 mb-2">Tests included:</p>
+              <div className="flex flex-wrap gap-2">
+                {team.curriculum.tests.slice(0, 5).map((test) => (
+                  <span
+                    key={test}
+                    className="px-2 py-1 bg-[#e3ca76]/20 text-[#e3ca76] text-xs rounded-full border border-[#e3ca76]/30"
+                  >
+                    {test}
+                  </span>
+                ))}
+                {team.curriculum.tests.length > 5 && (
+                  <span className="px-2 py-1 bg-white/10 text-white/70 text-xs rounded-full">
+                    +{team.curriculum.tests.length - 5} more
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Players Section */}
+      <div className="rounded-2xl border border-white/10 bg-black/60 p-6 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold text-white">Players</h2>
+          {(userRole === "coach" || userRole === "owner" || userRole === "admin") && (
+            <Button
+              onClick={() => setShowAddPlayerModal(true)}
+              className="flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Player</span>
+            </Button>
+          )}
+        </div>
+
+        {players.length === 0 ? (
+          <div className="text-center py-12">
+            <Users className="w-16 h-16 text-white/20 mx-auto mb-4" />
+            <p className="text-white/70 text-lg mb-2">No players yet</p>
+            <p className="text-white/50 text-sm">
+              Add players to this team to get started
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-white/5 border-b border-white/10">
+                <tr>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-white/90">
+                    Name
+                  </th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-white/90">
+                    Email
+                  </th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-white/90">
+                    Status
+                  </th>
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-white/90">
+                      Date of Birth
+                    </th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-white/90">
+                    Gender
+                  </th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-white/90">
+                    Dominant Foot
+                  </th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-white/90">
+                    Notes
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/10">
+                {players.map((player) => (
+                  <tr 
+                    key={player.id} 
+                    className="hover:bg-white/5 transition-colors cursor-pointer"
+                    onClick={(e) => {
+                      // Don't navigate if clicking on interactive elements
+                      const target = e.target as HTMLElement;
+                      if (target.tagName === 'A' || target.closest('a, button')) {
+                        return;
+                      }
+                      router.push(`/dashboard/teams/${teamId}/player/${player.id}`);
+                    }}
+                  >
+                    <td className="px-4 py-3">
+                      <p className="text-white font-medium">
+                        {player.firstName} {player.lastName}
+                      </p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2 text-white/70 text-sm">
+                        <Mail className="w-4 h-4" />
+                        {player.email}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        {(() => {
+                          // Check if player has completed all required profile fields
+                          const hasCompleteProfile = player.onboarded && player.dob && player.gender && player.dominantFoot;
+                          return hasCompleteProfile ? (
+                            <>
+                              <CheckCircle className="w-4 h-4 text-green-400" />
+                              <span className="text-green-400 text-sm">Active</span>
+                            </>
+                          ) : (
+                            <>
+                              <Clock className="w-4 h-4 text-yellow-400" />
+                              <span className="text-yellow-400 text-sm">Invitation Sent</span>
+                            </>
+                          );
+                        })()}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-white/70 text-sm">
+                      {player.dob ? new Date(player.dob).toLocaleDateString() : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-white/70 text-sm">
+                      {player.gender ? player.gender.charAt(0).toUpperCase() + player.gender.slice(1) : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-white/70 text-sm">
+                      {player.dominantFoot ? player.dominantFoot.charAt(0).toUpperCase() + player.dominantFoot.slice(1) : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-white/70 text-sm max-w-xs">
+                      <div className="truncate" title={player.notes || ""}>
+                        {player.notes || "—"}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Additional Information */}
+      <div className="rounded-2xl border border-white/10 bg-black/60 p-6">
+        <h2 className="text-xl font-bold text-white mb-4">Team Information</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="flex items-center gap-3">
+            <Calendar className="w-5 h-5 text-white/50" />
+            <div>
+              <p className="text-sm text-white/70">Created</p>
+              <p className="text-white">
+                {new Date(team.createdAt).toLocaleDateString("en-US", {
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <Calendar className="w-5 h-5 text-white/50" />
+            <div>
+              <p className="text-sm text-white/70">Last Updated</p>
+              <p className="text-white">
+                {new Date(team.updatedAt).toLocaleDateString("en-US", {
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Add Player Modal */}
+      {showAddPlayerModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-black/95 border border-white/10 rounded-2xl p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-white">Add Player</h2>
+              <button
+                onClick={() => setShowAddPlayerModal(false)}
+                className="text-white/70 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-white/90 mb-2">
+                  First Name *
+                </label>
+                <input
+                  type="text"
+                  value={playerForm.firstName}
+                  onChange={(e) =>
+                    setPlayerForm({ ...playerForm, firstName: e.target.value })
+                  }
+                  className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-[#e3ca76]/50"
+                  placeholder="Enter first name"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-white/90 mb-2">
+                  Last Name *
+                </label>
+                <input
+                  type="text"
+                  value={playerForm.lastName}
+                  onChange={(e) =>
+                    setPlayerForm({ ...playerForm, lastName: e.target.value })
+                  }
+                  className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-[#e3ca76]/50"
+                  placeholder="Enter last name"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-white/90 mb-2">
+                  Email *
+                </label>
+                <input
+                  type="email"
+                  value={playerForm.email}
+                  onChange={(e) =>
+                    setPlayerForm({ ...playerForm, email: e.target.value })
+                  }
+                  className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-[#e3ca76]/50"
+                  placeholder="Enter email address"
+                />
+                <p className="text-white/50 text-xs mt-2">
+                  An invitation email will be sent to this address
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3 pt-4">
+                <Button
+                  onClick={handleAddPlayer}
+                  disabled={
+                    !playerForm.firstName ||
+                    !playerForm.lastName ||
+                    !playerForm.email ||
+                    addingPlayer
+                  }
+                  className="flex-1"
+                >
+                  {addingPlayer ? "Adding..." : "Add Player"}
+                </Button>
+                <Button
+                  onClick={() => setShowAddPlayerModal(false)}
+                  variant="ghost"
+                  disabled={addingPlayer}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-black/95 border border-white/10 rounded-2xl p-6 w-full max-w-md">
+            <h3 className="text-xl font-bold text-white mb-4">Delete Team</h3>
+            <p className="text-white/70 mb-6">
+              Are you sure you want to delete "{team.name}"? This action cannot
+              be undone.
+            </p>
+            <div className="flex items-center gap-3">
+              <Button
+                onClick={handleDelete}
+                variant="outline"
+                className="flex-1 border-red-500/50 text-red-400 hover:bg-red-500/10"
+              >
+                Delete
+              </Button>
+              <Button
+                onClick={() => setDeleteConfirm(false)}
+                variant="ghost"
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+

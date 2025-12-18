@@ -1,23 +1,23 @@
-import { TrendingUp, Activity, ShieldCheck } from "lucide-react";
+import { TrendingUp, Activity, Target } from "lucide-react";
 
 const cards = [
   {
-    title: "Match Readiness",
-    value: "92%",
-    delta: "+5% vs last week",
+    title: "Player DNA Profile",
+    value: "39 points",
+    delta: "4 traits tracked",
     icon: TrendingUp,
   },
   {
-    title: "Max Velocity",
-    value: "33.4 km/h",
-    delta: "Top 5% sprint band",
+    title: "Tests Completed",
+    value: "13/13",
+    delta: "All tests recorded",
     icon: Activity,
   },
   {
-    title: "Availability",
-    value: "98.2%",
-    delta: "No red flags",
-    icon: ShieldCheck,
+    title: "AI Plans Ready",
+    value: "5 sessions",
+    delta: "Targeted to weaknesses",
+    icon: Target,
   },
 ];
 
@@ -27,11 +27,11 @@ export default function HeroInsightPanel() {
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-[#e3ca76]/10" />
       <div className="relative flex items-center justify-between gap-4 border-b border-white/10 pb-4">
         <div>
-          <p className="text-xs uppercase tracking-[0.25em] text-[#e3ca76]">Insight Panel</p>
-          <h3 className="text-xl font-semibold text-white">Pro Squad — Week 12</h3>
+          <p className="text-xs uppercase tracking-[0.25em] text-[#e3ca76]">Player Profile</p>
+          <h3 className="text-xl font-semibold text-white">Test Session — Week 4</h3>
         </div>
         <div className="rounded-full border border-white/10 bg-black/50 px-3 py-1 text-xs text-white/70">
-          Live sync: <span className="text-[#e3ca76]">01:32 ago</span>
+          Last updated: <span className="text-[#e3ca76]">2 days ago</span>
         </div>
       </div>
       <div className="relative mt-5 grid gap-4 sm:grid-cols-3">
@@ -53,7 +53,7 @@ export default function HeroInsightPanel() {
             <div className="mt-4 h-2 rounded-full bg-white/5">
               <div
                 className="h-2 rounded-full bg-gradient-to-r from-[#e3ca76] to-[#a78443]"
-                style={{ width: card.title === "Max Velocity" ? "78%" : card.title === "Availability" ? "96%" : "88%" }}
+                style={{ width: card.title === "Tests Completed" ? "100%" : card.title === "AI Plans Ready" ? "85%" : "100%" }}
               />
             </div>
           </div>

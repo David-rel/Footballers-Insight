@@ -32,18 +32,18 @@ export default function ContactForm() {
         <label className="space-y-2 text-sm text-white/80">
           Looking for
           <select className="w-full appearance-none rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white focus:border-[#e3ca76]/60 focus:outline-none">
-            <option className="bg-black">Product tour</option>
-            <option className="bg-black">Pricing</option>
-            <option className="bg-black">Partnership</option>
-            <option className="bg-black">Support</option>
+            <option className="bg-black">Platform demo</option>
+            <option className="bg-black">Pricing information</option>
+            <option className="bg-black">Testing setup help</option>
+            <option className="bg-black">General questions</option>
           </select>
         </label>
       </div>
-      <label className="mt-4 block space-y-2 text-sm text-white/80">
+        <label className="mt-4 block space-y-2 text-sm text-white/80">
         Message
         <textarea
           rows={4}
-          placeholder="Tell us about your team, goals, or timeframe."
+          placeholder="Tell us about your club, team size, age groups, or questions about the testing platform."
           className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/40 focus:border-[#e3ca76]/60 focus:outline-none"
         />
       </label>

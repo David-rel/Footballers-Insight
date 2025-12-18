@@ -1,19 +1,23 @@
 const faqs = [
   {
-    q: "How do dashboards differ by role?",
-    a: "Players see readiness, recovery, and personal objectives. Coaches see squad availability, tactical insights, and training plans. Admins manage permissions, compliance, and audits.",
+    q: "What tests do you run?",
+    a: "We run 13 standardized tests covering shot power, serve distance, dribbling, passing, 1v1 performance, juggling, skill moves, agility, reaction time, single-leg hops, jump endurance, ankle flexibility, and core strength. These create 39 data points per player.",
   },
   {
-    q: "Is this data live?",
-    a: "Yes. Metrics refresh automatically with your connected data sources. The UI is designed to show freshness and highlight any sync issues.",
+    q: "How does Player DNA work?",
+    a: "Raw test scores are combined into a complete player profile with 39 data points. This shows each player's strengths and weaknesses across four main traits: Power/Strength, Technique/Control, Mobility/Stability, and Decision/Cognition.",
   },
   {
-    q: "Can we use SSO and granular permissions?",
-    a: "The platform supports SSO and role-based access controls down to feature- and data-scope levels, with export controls and audit trails.",
+    q: "How does AI generate session plans?",
+    a: "The AI analyzes each player's current Player DNA profile, tracks how it changes over time, and identifies where help is needed most. It then suggests targeted drills, small group pairings, and focus areas for practice sessions.",
   },
   {
-    q: "Do you support multiple teams or academies?",
-    a: "Yes. We support multi-tenant structures so clubs can manage first teams, academy groups, and loan players from one place.",
+    q: "Is this affordable for youth clubs?",
+    a: "Yes. We built this specifically for youth clubs and academies. Our pricing is designed to be accessible for teams of all sizes, making objective player development data available to everyone.",
+  },
+  {
+    q: "What ages is this for?",
+    a: "The platform works for all ages. The 13 tests can be adapted for different age groups while maintaining consistency in measurement and tracking.",
   },
 ];
 

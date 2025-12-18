@@ -9,11 +9,11 @@ import Button from "@/components/ui/Button";
 import Link from "next/link";
 
 const liveMetrics = [
-  "Win probability +7% vs form",
-  "Training load balanced",
-  "Injury risk: low",
-  "Readiness 92%",
-  "Availability 98%",
+  "Player DNA tracking active",
+  "13 tests per session",
+  "AI session plans ready",
+  "39 data points collected",
+  "Progress tracked weekly",
 ];
 
 export default function HomePage() {
@@ -22,13 +22,15 @@ export default function HomePage() {
       <section className="relative mx-auto flex max-w-6xl flex-col gap-10 px-6 pb-16 pt-12 md:flex-row md:items-center">
         <div className="relative z-10 flex-1 space-y-6">
           <div className="inline-flex items-center gap-2 rounded-full border border-[#e3ca76]/30 bg-white/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-[#e3ca76]">
-            Performance Intelligence
+            Player Testing Platform
           </div>
           <h1 className="text-4xl font-semibold leading-[1.05] text-white sm:text-5xl md:text-6xl">
-            Gold-standard insights for players, coaches, and clubs.
+            Data-driven player development for youth clubs and academies.
           </h1>
           <p className="max-w-2xl text-lg text-white/70">
-            Footballers Insight delivers live readiness, tactical clarity, and governance so every decision is data-backed and effortless.
+            Collect objective test data so coaches can know players objectively
+            and focus more time on knowing them as people. AI-powered session
+            plans target where help is needed most.
           </p>
           <div className="flex flex-wrap gap-3">
             <Link href="/login">
@@ -39,9 +41,15 @@ export default function HomePage() {
             </Link>
           </div>
           <div className="flex flex-wrap gap-2 text-xs uppercase tracking-[0.2em] text-white/40">
-            <span className="rounded-full border border-white/10 px-3 py-1">SSO Ready</span>
-            <span className="rounded-full border border-white/10 px-3 py-1">Compliance Guardrails</span>
-            <span className="rounded-full border border-white/10 px-3 py-1">Squad + Academy</span>
+            <span className="rounded-full border border-white/10 px-3 py-1">
+              Affordable Pricing
+            </span>
+            <span className="rounded-full border border-white/10 px-3 py-1">
+              All Ages
+            </span>
+            <span className="rounded-full border border-white/10 px-3 py-1">
+              AI Session Plans
+            </span>
           </div>
         </div>
         <div className="relative z-10 flex-1">
@@ -52,11 +60,17 @@ export default function HomePage() {
       <section className="relative mx-auto max-w-6xl px-6 pb-12">
         <div className="flex items-center gap-3 overflow-hidden rounded-full border border-white/10 bg-black/60 px-4 py-3 text-sm text-white/80">
           <span className="flex h-2.5 w-2.5 items-center justify-center rounded-full bg-[#e3ca76] shadow-[0_0_0_6px_rgba(227,202,118,0.2)]" />
-          <div className="flex gap-6 animate-[scroll_30s_linear_infinite] whitespace-nowrap" style={{
-            animation: "scroll 30s linear infinite",
-          }}>
+          <div
+            className="flex gap-6 animate-[scroll_30s_linear_infinite] whitespace-nowrap"
+            style={{
+              animation: "scroll 30s linear infinite",
+            }}
+          >
             {liveMetrics.concat(liveMetrics).map((item, idx) => (
-              <span key={`${item}-${idx}`} className="rounded-full bg-white/5 px-3 py-1 text-white/70">
+              <span
+                key={`${item}-${idx}`}
+                className="rounded-full bg-white/5 px-3 py-1 text-white/70"
+              >
                 {item}
               </span>
             ))}
@@ -66,9 +80,9 @@ export default function HomePage() {
 
       <section className="relative mx-auto max-w-6xl space-y-8 px-6 pb-16">
         <SectionHeader
-          eyebrow="Dashboards"
-          title="Built for every role"
-          subtitle="Purpose-built experiences for players, coaches, and admins—connected by a single source of truth."
+          eyebrow="How It Works"
+          title="From testing to training plans"
+          subtitle="Simple, repeatable tests create objective player profiles. AI uses that data to suggest targeted session plans."
         />
         <RoleHighlights />
       </section>
@@ -76,17 +90,17 @@ export default function HomePage() {
       <section className="relative mx-auto max-w-6xl space-y-8 px-6 pb-16">
         <SectionHeader
           eyebrow="Platform"
-          title="Everything you need in one surface"
-          subtitle="From matchday briefings to compliance, Footballers Insight keeps every workflow aligned."
+          title="Everything you need in one place"
+          subtitle="Test tracking, Player DNA profiles, progress monitoring, and AI-generated practice plans."
         />
         <SpotlightTabs />
       </section>
 
       <section className="relative mx-auto max-w-6xl space-y-8 px-6 pb-16">
         <SectionHeader
-          eyebrow="Proof"
-          title="Trusted where performance matters"
-          subtitle="Scale, reliability, and clarity for first teams and academies alike."
+          eyebrow="The Process"
+          title="Five steps to better development"
+          subtitle="Testing, creating player profiles, grouping players by type, learning from training, and AI-powered session planning."
         />
         <StatsRow />
       </section>
@@ -95,16 +109,23 @@ export default function HomePage() {
         <SectionHeader
           eyebrow="Answers"
           title="FAQ"
-          subtitle="Everything you need to know about how we onboard, secure, and tailor dashboards."
+          subtitle="Everything you need to know about our testing platform and how it works."
         />
         <FAQList />
       </section>
 
       <section className="relative mx-auto max-w-6xl space-y-6 px-6 pb-20">
         <div className="rounded-3xl border border-[#e3ca76]/30 bg-gradient-to-r from-[#e3ca76]/20 via-black to-[#a78443]/25 p-10 text-center shadow-[0_25px_80px_rgba(0,0,0,0.45)]">
-          <p className="text-xs uppercase tracking-[0.2em] text-[#e3ca76]">Get started</p>
-          <h3 className="mt-2 text-3xl font-semibold text-white">Choose your dashboard path</h3>
-          <p className="mt-3 text-white/70">Players, coaches, and admins each get a tailored experience. Log in or create your account.</p>
+          <p className="text-xs uppercase tracking-[0.2em] text-[#e3ca76]">
+            Get started
+          </p>
+          <h3 className="mt-2 text-3xl font-semibold text-white">
+            Start tracking player development
+          </h3>
+          <p className="mt-3 text-white/70">
+            Affordable testing platform for youth clubs and academies. Log in or
+            create your account.
+          </p>
           <div className="mt-6 flex flex-wrap justify-center gap-3">
             <Link href="/login">
               <Button>Access now</Button>

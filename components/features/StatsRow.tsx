@@ -1,8 +1,8 @@
 const stats = [
-  { label: "clubs supported", value: "48" },
-  { label: "matches analyzed", value: "12,400" },
-  { label: "data points processed", value: "1.9B" },
-  { label: "uptime", value: "99.98%" },
+  { label: "tests per session", value: "13" },
+  { label: "data points per player", value: "39" },
+  { label: "main traits measured", value: "4" },
+  { label: "affordable pricing", value: "Yes" },
 ];
 
 export default function StatsRow() {

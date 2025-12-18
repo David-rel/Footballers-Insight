@@ -3,21 +3,21 @@ import { Shield, Sparkles, Workflow } from "lucide-react";
 
 const roles = [
   {
-    label: "Player Dashboard",
-    desc: "Check readiness, recovery, and personal objectives before every session.",
-    badge: "Personalized",
+    label: "Test Dashboard",
+    desc: "View all test results, track progress over time, and see Player DNA profiles.",
+    badge: "Objective Data",
     icon: Sparkles,
   },
   {
-    label: "Coach Dashboard",
-    desc: "Manage availability, set plans, and get instant matchday briefings.",
-    badge: "Squad view",
+    label: "Coach View",
+    desc: "See all players' profiles, identify needs, and access AI-generated session plans.",
+    badge: "Team Overview",
     icon: Workflow,
   },
   {
-    label: "Admin Console",
-    desc: "Govern access, monitor compliance, and secure exports across teams.",
-    badge: "SSO ready",
+    label: "AI Session Planner",
+    desc: "Get targeted practice plans and small group suggestions based on test data.",
+    badge: "AI-Powered",
     icon: Shield,
   },
 ];

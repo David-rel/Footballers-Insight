@@ -5,39 +5,43 @@ import { cn } from "@/lib/utils";
 
 const spotlight = [
   {
-    id: "matchday",
-    title: "Matchday Briefing",
-    summary: "Projected XI, readiness risks, and tactical notes in one laminated view.",
+    id: "testing",
+    title: "Test Collection",
+    summary:
+      "13 repeatable tests measure power, technique, mobility, and decision-making. All scores tracked consistently.",
     bullets: [
-      "Win prob. vs last five: +7%",
-      "Set-piece focus: back-post overload",
-      "Player watch: sprint load cap for LW",
+      "13 standardized tests",
+      "39 data points per player",
+      "Progress tracked week-over-week",
     ],
   },
   {
-    id: "training",
-    title: "Training Plan",
-    summary: "Session builder aligned to load targets and upcoming fixtures.",
+    id: "dna",
+    title: "Player DNA Profile",
+    summary:
+      "Raw test scores combined into a complete player profile showing strengths across four main traits.",
     bullets: [
-      "Microcycle: H + M + L progression",
-      "RPE guardrails auto-adjust",
-      "Position groups synced to GPS data",
+      "Power/Strength: Shot power, serve distance, jumps",
+      "Technique/Control: Dribbling, passing, juggling",
+      "Mobility/Stability: Agility, flexibility, core",
+      "Decision/Cognition: 1v1 performance, reaction time",
     ],
   },
   {
-    id: "transfer",
-    title: "Transfer Lens",
-    summary: "Profile, benchmark, and validate targets with role fit scoring.",
+    id: "ai-plans",
+    title: "AI Session Plans",
+    summary:
+      "AI analyzes Player DNA and suggests targeted practice plans based on where each player needs help most.",
     bullets: [
-      "Fit score: 86/100 vs league avg 74",
-      "Top comps: progressive carries, duel win%",
-      "Compliance: all documents verified",
+      "Focus: Improve weak foot passing",
+      "Small group: Pair with technical mentor",
+      "Drill: Figure-8 dribble progression",
     ],
   },
 ];
 
 export default function SpotlightTabs() {
-  const [active, setActive] = useState("matchday");
+  const [active, setActive] = useState("testing");
   const current = spotlight.find((item) => item.id === active) ?? spotlight[0];
 
   return (
@@ -62,7 +66,9 @@ export default function SpotlightTabs() {
       <div className="mt-6 rounded-2xl border border-white/10 bg-gradient-to-br from-white/5 to-[#e3ca76]/10 p-6 text-white">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-[#e3ca76]">Spotlight</p>
+            <p className="text-xs uppercase tracking-[0.2em] text-[#e3ca76]">
+              Spotlight
+            </p>
             <h3 className="mt-1 text-2xl font-semibold">{current.title}</h3>
             <p className="mt-2 text-white/70">{current.summary}</p>
           </div>
@@ -72,7 +78,10 @@ export default function SpotlightTabs() {
         </div>
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
           {current.bullets.map((bullet) => (
-            <div key={bullet} className="rounded-xl border border-white/10 bg-black/40 p-3 text-sm text-white/80">
+            <div
+              key={bullet}
+              className="rounded-xl border border-white/10 bg-black/40 p-3 text-sm text-white/80"
+            >
               <div className="mb-2 h-1 w-8 rounded-full bg-gradient-to-r from-[#e3ca76] to-[#a78443]" />
               {bullet}
             </div>

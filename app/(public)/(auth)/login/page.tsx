@@ -1,29 +1,73 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { FormEvent, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { signIn } from "next-auth/react";
 import Button from "@/components/ui/Button";
 import SectionHeader from "@/components/ui/SectionHeader";
-
-const SESSION_COOKIE = "fi_session";
-
-function setSessionCookie(email: string) {
-  document.cookie = `${SESSION_COOKIE}=${encodeURIComponent(email)}; path=/; max-age=86400; samesite=lax`;
-}
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [registered, setRegistered] = useState(false);
 
-  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+  useEffect(() => {
+    // Get registered param from URL directly
+    if (typeof window !== "undefined") {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get("registered") === "true") {
+        setRegistered(true);
+      }
+    }
+  }, []);
+
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    setError("");
     setLoading(true);
-    // Front-end only demo auth: set a simple cookie to simulate a session.
-    setSessionCookie(email || "demo@footballersinsight.com");
-    router.push("/dashboard");
+
+    try {
+      const result = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
+      });
+
+      if (result?.error) {
+        setError("Invalid email or password");
+        setLoading(false);
+        return;
+      }
+
+      if (result?.ok) {
+        // Refresh the page to get the updated session
+        router.refresh();
+        // Small delay to ensure session is updated, then check if user needs onboarding
+        setTimeout(async () => {
+          try {
+            const sessionRes = await fetch("/api/auth/session");
+            const sessionData = await sessionRes.json();
+            
+            // If player is not onboarded, redirect to password reset
+            if (sessionData?.user?.role === "player" && !sessionData?.user?.onboarded) {
+              router.push("/onboarding/player");
+            } else {
+              router.push("/dashboard");
+            }
+          } catch (err) {
+            // Fallback to dashboard if session check fails
+            router.push("/dashboard");
+          }
+        }, 100);
+      }
+    } catch (err: any) {
+      setError("An error occurred. Please try again.");
+      setLoading(false);
+    }
   }
 
   return (
@@ -31,12 +75,22 @@ export default function LoginPage() {
       <SectionHeader
         eyebrow="Access"
         title="Welcome back"
-        subtitle="Front-end only demo auth. Enter any email and password to continue."
+        subtitle="Sign in to your Footballers Insight account."
         align="left"
       />
 
       <div className="grid gap-8 rounded-3xl border border-white/10 bg-black/60 p-8 shadow-[0_25px_80px_rgba(0,0,0,0.45)] md:grid-cols-[1.2fr_1fr]">
         <form onSubmit={handleSubmit} className="space-y-5">
+          {registered && (
+            <div className="rounded-xl bg-green-500/10 border border-green-500/50 p-3 text-sm text-green-400">
+              Account created successfully! Please sign in.
+            </div>
+          )}
+          {error && (
+            <div className="rounded-xl bg-red-500/10 border border-red-500/50 p-3 text-sm text-red-400">
+              {error}
+            </div>
+          )}
           <div>
             <label className="text-sm text-white/70">Email</label>
             <input
@@ -71,15 +125,15 @@ export default function LoginPage() {
         </form>
 
         <div className="space-y-4 rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80">
-          <p className="text-xs uppercase tracking-[0.2em] text-[#e3ca76]">Demo mode</p>
+          <p className="text-xs uppercase tracking-[0.2em] text-[#e3ca76]">Secure Login</p>
           <p className="text-sm text-white/70">
-            This flow runs entirely on the front end. A simple cookie is set to mimic a logged-in session so you can
-            navigate to the dashboard.
+            Your credentials are securely authenticated using NextAuth. All passwords are hashed and never stored in
+            plain text.
           </p>
           <ul className="space-y-2 text-sm text-white/70">
-            <li>• Use any email and password</li>
-            <li>• Cookie expires in 24h or when you sign out</li>
-            <li>• Protected routes redirect based on that cookie</li>
+            <li>• Secure password authentication</li>
+            <li>• Email verification required</li>
+            <li>• Session-based security</li>
           </ul>
         </div>
       </div>
