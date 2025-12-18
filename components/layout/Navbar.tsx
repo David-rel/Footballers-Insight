@@ -19,14 +19,12 @@ export default function Navbar() {
   return (
     <header className="sticky top-0 z-40 border-b border-white/5 bg-black/70 backdrop-blur-xl">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-        <Link href="/" className="flex items-center gap-2 text-lg font-semibold tracking-tight">
-          <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-[#e3ca76] to-[#a78443] text-black shadow-lg">
-            FI
-          </span>
-          <div className="leading-tight">
-            <div className="text-sm uppercase text-white/60">Footballers</div>
-            <div className="text-lg text-white">Insight</div>
-          </div>
+        <Link href="/" className="flex items-center gap-3 text-lg font-semibold tracking-tight">
+          <img 
+            src="/logodark.png" 
+            alt="Footballers Insight" 
+            className="h-14 w-auto rounded-lg"
+          />
         </Link>
 
         <nav className="hidden items-center gap-8 md:flex">

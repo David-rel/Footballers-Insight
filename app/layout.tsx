@@ -18,6 +18,11 @@ export const metadata: Metadata = {
   title: "Footballers Insight",
   description:
     "Performance intelligence for players, coaches, and clubs powered by Footballers Insight.",
+  icons: {
+    icon: [{ url: "/icondark-rounded.png", type: "image/png" }],
+    shortcut: "/icondark-rounded.png",
+    apple: "/icondark-rounded.png",
+  },
 };
 
 export default function RootLayout({
@@ -40,7 +45,9 @@ export default function RootLayout({
             <div className="relative min-h-screen overflow-hidden">
               <div className="glow" />
               <div className="grain" />
-              <div className="relative z-10 flex min-h-screen flex-col">{children}</div>
+              <div className="relative z-10 flex min-h-screen flex-col">
+                {children}
+              </div>
             </div>
           </SessionProvider>
         </ThemeProvider>

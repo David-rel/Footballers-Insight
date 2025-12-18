@@ -44,11 +44,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Company not found" }, { status: 404 });
     }
 
-    // Get all members for this company (all users with this company_id)
+    // Get all members for this company (exclude players - they're shown on Players page)
     const membersResult = await pool.query(
       `SELECT u.id, u.name, u.email, u.phone_number, u.image_url, u.role, u.created_at, u.onboarded
        FROM users u
-       WHERE u.company_id = $1
+       WHERE u.company_id = $1 AND u.role != 'player'
        ORDER BY u.role, u.name`,
       [companyId]
     );
