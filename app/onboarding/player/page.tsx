@@ -27,10 +27,16 @@ function PlayerOnboardingContent() {
   } | null>(null);
 
   useEffect(() => {
-    // Redirect if already onboarded or not a player
+    // Redirect if not a parent/player (parents can complete player profiles when playerId is present)
     // Only check if we have a valid session
     if (session?.user) {
-      if ((session.user as any).role !== "player") {
+      const role = (session.user as any).role;
+      if (role !== "player" && role !== "parent") {
+        router.push("/dashboard");
+        return;
+      }
+      // Parents should not use the "set password" version of this page
+      if (role === "parent" && !playerId) {
         router.push("/dashboard");
         return;
       }
@@ -93,9 +99,13 @@ function PlayerOnboardingContent() {
     e.preventDefault();
     setError("");
 
-    // If playerId exists, user is already onboarded, just updating player profile
-    // Otherwise, they need to set password
+    // If playerId exists, user is just updating a player profile
+    // Otherwise (legacy player-only flow), they need to set password
     if (!playerId) {
+      if ((session?.user as any)?.role !== "player") {
+        setError("Access denied");
+        return;
+      }
       if (password.length < 8) {
         setError("Password must be at least 8 characters long");
         return;

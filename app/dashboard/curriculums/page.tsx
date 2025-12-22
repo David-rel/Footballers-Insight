@@ -86,8 +86,8 @@ export default function CurriculumsPage() {
         const role = profileData.user.role;
         setUserRole(role);
 
-        // Coaches and players cannot access curriculums
-        if (role === "coach" || role === "player") {
+        // Coaches, players, and parents cannot access curriculums
+        if (role === "coach" || role === "player" || role === "parent") {
           router.push("/dashboard");
           return;
         }

@@ -52,9 +52,17 @@ export default function LoginPage() {
             const sessionRes = await fetch("/api/auth/session");
             const sessionData = await sessionRes.json();
             
-            // If player is not onboarded, redirect to password reset
-            if (sessionData?.user?.role === "player" && !sessionData?.user?.onboarded) {
-              router.push("/onboarding/player");
+            // If parent/player is not onboarded, redirect to onboarding
+            if (
+              (sessionData?.user?.role === "parent" ||
+                sessionData?.user?.role === "player") &&
+              !sessionData?.user?.onboarded
+            ) {
+              router.push(
+                sessionData?.user?.role === "parent"
+                  ? "/onboarding/parent"
+                  : "/onboarding/player"
+              );
             } else {
               router.push("/dashboard");
             }

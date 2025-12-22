@@ -3,7 +3,7 @@ import { TrendingUp, Activity, Target } from "lucide-react";
 const cards = [
   {
     title: "Player DNA Profile",
-    value: "39 points",
+    value: "38 points",
     delta: "4 traits tracked",
     icon: TrendingUp,
   },

@@ -16,6 +16,7 @@ import {
   Mail,
   CheckCircle,
   Clock,
+  ClipboardList,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
 
@@ -47,7 +48,7 @@ interface Team {
 
 interface Player {
   id: string;
-  userId: string;
+  parentUserId: string;
   teamId: string;
   firstName: string;
   lastName: string;
@@ -56,9 +57,25 @@ interface Player {
   gender: string | null;
   dominantFoot: string | null;
   notes: string | null;
+  selfSupervised: boolean;
+  parentName?: string;
+  parentPhoneNumber?: string | null;
   email: string;
   emailVerified: boolean;
   onboarded: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface Evaluation {
+  id: string;
+  teamId: string;
+  createdBy: string;
+  createdByName: string;
+  name: string;
+  oneVOneRounds: number;
+  skillMovesCount: number;
+  scores: Record<string, Record<string, string | number>>;
   createdAt: string;
   updatedAt: string;
 }
@@ -70,22 +87,37 @@ export default function TeamDetailPage() {
 
   const [team, setTeam] = useState<Team | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
+  const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [computingAllData, setComputingAllData] = useState(false);
   const [showAddPlayerModal, setShowAddPlayerModal] = useState(false);
   const [addingPlayer, setAddingPlayer] = useState(false);
+  const [hoveredPlayer, setHoveredPlayer] = useState<Player | null>(null);
+  const [hoverPos, setHoverPos] = useState<{ x: number; y: number }>({
+    x: 0,
+    y: 0,
+  });
   const [playerForm, setPlayerForm] = useState({
     firstName: "",
     lastName: "",
-    email: "",
+    hasParent: true,
+    parentName: "",
+    parentEmail: "",
+    selfSupervised: false,
+    selfSupervisorEmail: "",
   });
 
   useEffect(() => {
     fetchTeam();
     fetchUserRole();
     fetchPlayers();
+    fetchEvaluations();
   }, [teamId]);
+
+  // NOTE: We intentionally do NOT allow selecting an existing parent account here,
+  // to avoid exposing other parents in the company to coaches/staff.
 
   async function fetchUserRole() {
     try {
@@ -132,25 +164,69 @@ export default function TeamDetailPage() {
     }
   }
 
+  async function fetchEvaluations() {
+    try {
+      const response = await fetch(`/api/teams/${teamId}/evaluations`);
+      if (response.ok) {
+        const data = await response.json();
+        setEvaluations(data.evaluations);
+      }
+    } catch (error) {
+      console.error("Failed to fetch evaluations:", error);
+    }
+  }
+
+  // TESTING ONLY: Computes "all data" for the team (currently only Shot Power) server-side (console logs).
+  async function handleComputeAllData() {
+    try {
+      setComputingAllData(true);
+      const res = await fetch(`/api/teams/${teamId}/evaluations/compute-all`, {
+        method: "POST",
+      });
+      // Don't display anything in the UI - this is for server console log testing only.
+      // Drain the response body without rendering anything.
+      await res.text().catch(() => null);
+    } catch (error) {
+      console.error("Failed to compute shot power:", error);
+    } finally {
+      setComputingAllData(false);
+    }
+  }
+
   async function handleAddPlayer() {
     try {
       setAddingPlayer(true);
+
+      const payload: any = {
+        firstName: playerForm.firstName,
+        lastName: playerForm.lastName,
+        hasParent: playerForm.hasParent,
+        parentName: playerForm.parentName || null,
+        parentEmail: playerForm.parentEmail || null,
+        selfSupervised: playerForm.selfSupervised,
+        selfSupervisorEmail: playerForm.selfSupervisorEmail || null,
+      };
+
       const response = await fetch(`/api/teams/${teamId}/players`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          firstName: playerForm.firstName,
-          lastName: playerForm.lastName,
-          email: playerForm.email,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (response.ok) {
         await fetchPlayers();
         setShowAddPlayerModal(false);
-        setPlayerForm({ firstName: "", lastName: "", email: "" });
+        setPlayerForm({
+          firstName: "",
+          lastName: "",
+          hasParent: true,
+          parentName: "",
+          parentEmail: "",
+          selfSupervised: false,
+          selfSupervisorEmail: "",
+        });
       } else {
         const error = await response.json();
         alert(error.error || "Failed to add player");
@@ -326,6 +402,65 @@ export default function TeamDetailPage() {
         </div>
       </div>
 
+      {/* Evaluations Section */}
+      {(userRole === "coach" || userRole === "owner" || userRole === "admin") && (
+        <div className="rounded-2xl border border-white/10 bg-black/60 p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <h2 className="text-xl font-bold text-white">Evaluations</h2>
+              <Button
+                variant="outline"
+                className="border-[#e3ca76]/50 text-[#e3ca76] hover:bg-[#e3ca76]/10"
+                disabled={computingAllData || evaluations.length === 0}
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleComputeAllData();
+                }}
+              >
+                {computingAllData ? "Computing..." : "Compute All Data"}
+              </Button>
+            </div>
+            <Button
+              onClick={() => router.push(`/dashboard/teams/${teamId}/evaluations/new`)}
+              className="flex items-center gap-2"
+            >
+              <ClipboardList className="w-4 h-4" />
+              <span>New Evaluation</span>
+            </Button>
+          </div>
+
+          {evaluations.length === 0 ? (
+            <div className="text-center py-8">
+              <ClipboardList className="w-12 h-12 text-white/20 mx-auto mb-3" />
+              <p className="text-white/70 text-sm mb-1">No evaluations yet</p>
+              <p className="text-white/50 text-xs">
+                Create an evaluation to start tracking player test scores
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {evaluations.map((evaluation) => (
+                <div
+                  key={evaluation.id}
+                  className="flex items-center justify-between p-4 bg-white/5 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+                  onClick={() => router.push(`/dashboard/teams/${teamId}/evaluations/${evaluation.id}`)}
+                >
+                  <div className="flex-1">
+                    <h3 className="text-white font-medium">{evaluation.name}</h3>
+                    <p className="text-white/50 text-sm mt-1">
+                      Created by {evaluation.createdByName} • {new Date(evaluation.createdAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <div className="text-white/70 text-sm">
+                    {players.length} player{players.length !== 1 ? "s" : ""}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Players Section */}
       <div className="rounded-2xl border border-white/10 bg-black/60 p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
@@ -392,9 +527,31 @@ export default function TeamDetailPage() {
                     }}
                   >
                     <td className="px-4 py-3">
-                      <p className="text-white font-medium">
-                        {player.firstName} {player.lastName}
-                      </p>
+                      <div
+                        className="inline-block"
+                        onMouseEnter={(e) => {
+                          const rect = (
+                            e.currentTarget as HTMLDivElement
+                          ).getBoundingClientRect();
+                          const cardWidth = 320;
+                          const padding = 12;
+                          const x = Math.min(
+                            Math.max(rect.left, padding),
+                            Math.max(padding, window.innerWidth - cardWidth - padding)
+                          );
+                          setHoverPos({ x, y: rect.bottom + 8 });
+                          setHoveredPlayer(player);
+                        }}
+                        onMouseLeave={() => {
+                          setHoveredPlayer((current) =>
+                            current?.id === player.id ? null : current
+                          );
+                        }}
+                      >
+                        <p className="text-white font-medium">
+                          {player.firstName} {player.lastName}
+                        </p>
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2 text-white/70 text-sm">
@@ -442,6 +599,54 @@ export default function TeamDetailPage() {
           </div>
         )}
       </div>
+
+      {/* Fixed hover card (not clipped by table overflow) */}
+      {hoveredPlayer && (
+        <div
+          className="pointer-events-none fixed z-[9999] w-[320px] rounded-xl border border-white/10 bg-black/95 p-4 text-sm text-white shadow-[0_20px_70px_rgba(0,0,0,0.6)]"
+          style={{ left: hoverPos.x, top: hoverPos.y }}
+        >
+          <div className="mb-3">
+            <p className="text-xs uppercase tracking-[0.2em] text-[#e3ca76]">
+              Supervisor
+            </p>
+            <p className="mt-1 text-white/90">{hoveredPlayer.parentName || "—"}</p>
+            <p className="text-white/70">{hoveredPlayer.email}</p>
+            {hoveredPlayer.parentPhoneNumber ? (
+              <p className="text-white/70">{hoveredPlayer.parentPhoneNumber}</p>
+            ) : null}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <p className="text-xs text-white/50">Self-supervised</p>
+              <p className="text-white/80">
+                {hoveredPlayer.selfSupervised ? "Yes" : "No"}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-white/50">Email verified</p>
+              <p className="text-white/80">
+                {hoveredPlayer.emailVerified ? "Yes" : "No"}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-white/50">Supervisor onboarded</p>
+              <p className="text-white/80">{hoveredPlayer.onboarded ? "Yes" : "No"}</p>
+            </div>
+            <div>
+              <p className="text-xs text-white/50">Player profile complete</p>
+              <p className="text-white/80">
+                {hoveredPlayer.dob &&
+                hoveredPlayer.gender &&
+                hoveredPlayer.dominantFoot
+                  ? "Yes"
+                  : "No"}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Additional Information */}
       <div className="rounded-2xl border border-white/10 bg-black/60 p-6">
@@ -521,23 +726,113 @@ export default function TeamDetailPage() {
                 />
               </div>
 
-              <div>
+              <div className="pt-2 border-t border-white/10">
                 <label className="block text-sm font-medium text-white/90 mb-2">
-                  Email *
+                  Supervisor setup
                 </label>
-                <input
-                  type="email"
-                  value={playerForm.email}
-                  onChange={(e) =>
-                    setPlayerForm({ ...playerForm, email: e.target.value })
-                  }
-                  className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-[#e3ca76]/50"
-                  placeholder="Enter email address"
-                />
-                <p className="text-white/50 text-xs mt-2">
-                  An invitation email will be sent to this address
-                </p>
+
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-white/80 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={playerForm.hasParent}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setPlayerForm({
+                          ...playerForm,
+                          hasParent: checked,
+                          selfSupervised: checked ? false : playerForm.selfSupervised,
+                        });
+                      }}
+                      className="accent-[#e3ca76]"
+                    />
+                    This player has a parent/guardian account
+                  </label>
+
+                  <label className="flex items-center gap-2 text-white/80 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={playerForm.selfSupervised}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setPlayerForm({
+                          ...playerForm,
+                          selfSupervised: checked,
+                          hasParent: checked ? false : playerForm.hasParent,
+                        });
+                      }}
+                      className="accent-[#e3ca76]"
+                    />
+                    Player is their own supervisor (uses their own email to log in)
+                  </label>
+                </div>
               </div>
+
+              {playerForm.hasParent && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-white/90 mb-2">
+                      Parent/Guardian Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={playerForm.parentName}
+                      onChange={(e) =>
+                        setPlayerForm({
+                          ...playerForm,
+                          parentName: e.target.value,
+                        })
+                      }
+                      className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-[#e3ca76]/50"
+                      placeholder="Enter parent/guardian name"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-white/90 mb-2">
+                      Parent/Guardian Email *
+                    </label>
+                    <input
+                      type="email"
+                      value={playerForm.parentEmail}
+                      onChange={(e) =>
+                        setPlayerForm({
+                          ...playerForm,
+                          parentEmail: e.target.value,
+                        })
+                      }
+                      className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-[#e3ca76]/50"
+                      placeholder="parent@email.com"
+                    />
+                    <p className="text-white/50 text-xs mt-2">
+                      We’ll send a login invite to this email (or link if it already
+                      exists).
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {playerForm.selfSupervised && (
+                <div>
+                  <label className="block text-sm font-medium text-white/90 mb-2">
+                    Player Email *
+                  </label>
+                  <input
+                    type="email"
+                    value={playerForm.selfSupervisorEmail}
+                    onChange={(e) =>
+                      setPlayerForm({
+                        ...playerForm,
+                        selfSupervisorEmail: e.target.value,
+                      })
+                    }
+                    className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-[#e3ca76]/50"
+                    placeholder="player@email.com"
+                  />
+                  <p className="text-white/50 text-xs mt-2">
+                    We’ll send a login invite to this email.
+                  </p>
+                </div>
+              )}
 
               <div className="flex items-center gap-3 pt-4">
                 <Button
@@ -545,7 +840,10 @@ export default function TeamDetailPage() {
                   disabled={
                     !playerForm.firstName ||
                     !playerForm.lastName ||
-                    !playerForm.email ||
+                    (!playerForm.hasParent && !playerForm.selfSupervised) ||
+                    (playerForm.hasParent &&
+                      (!playerForm.parentName || !playerForm.parentEmail)) ||
+                    (playerForm.selfSupervised && !playerForm.selfSupervisorEmail) ||
                     addingPlayer
                   }
                   className="flex-1"
@@ -593,6 +891,7 @@ export default function TeamDetailPage() {
           </div>
         </div>
       )}
+
     </div>
   );
 }

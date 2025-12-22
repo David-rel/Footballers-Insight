@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
-    // Coaches and players cannot access curriculums
+    // Coaches, players, and parents cannot access curriculums
     const userResult = await pool.query(
       "SELECT role FROM users WHERE id = $1",
       [session.user.id]
@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
 
     if (userResult.rows.length > 0) {
       const role = userResult.rows[0].role;
-      if (role === "coach" || role === "player") {
+      if (role === "coach" || role === "player" || role === "parent") {
         return NextResponse.json(
           { error: "Access denied" },
           { status: 403 }
@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
-    // Coaches and players cannot create curriculums
+    // Coaches, players, and parents cannot create curriculums
     const userResult = await pool.query(
       "SELECT role FROM users WHERE id = $1",
       [session.user.id]
@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
 
     if (userResult.rows.length > 0) {
       const role = userResult.rows[0].role;
-      if (role === "coach" || role === "player") {
+      if (role === "coach" || role === "player" || role === "parent") {
         return NextResponse.json(
           { error: "Access denied" },
           { status: 403 }

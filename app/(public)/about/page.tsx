@@ -8,7 +8,7 @@ const values = [
 
 const process = [
   { label: "Step 1", headline: "Testing & Collection", detail: "Run 13 repeatable tests with and without the ball to measure power, technique, decision making, and movement. All raw scores recorded consistently." },
-  { label: "Step 2", headline: "Creating the Player DNA", detail: "Raw test scores combined into a complete player profile (39 data points) showing strengths and weaknesses across four main traits." },
+  { label: "Step 2", headline: "Creating the Player DNA", detail: "Raw test scores combined into a complete player profile (38 data points) showing strengths and weaknesses across four main traits." },
   { label: "Step 3", headline: "Grouping Players by Type", detail: "Each player gets categorized based on their profile. Used to group similar players together and see how they compare." },
   { label: "Step 4", headline: "Learning from Training", detail: "Compare what training each player did with how their profile changed. Learn which drills and workloads actually improve each trait." },
   { label: "Step 5", headline: "AI Analysis for Practice Plans", detail: "Current Player DNA, cluster information, and recent changes are analyzed by AI to design practice plans with targeted drills and small group focuses." },

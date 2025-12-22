@@ -4,15 +4,15 @@ import { Target, Brain, BarChart3 } from "lucide-react";
 const roleCards = [
   {
     title: "Testing",
-    copy: "Run 13 repeatable tests to collect 39 objective data points per player. Simple, consistent measurements.",
-    points: ["13 standardized tests", "39 data points collected", "Track progress over time"],
+    copy: "Run 13 repeatable tests to collect 38 objective data points per player. Simple, consistent measurements.",
+    points: ["13 standardized tests", "38 data points collected", "Track progress over time"],
     icon: Target,
     cta: "View testing guide",
   },
   {
     title: "Player DNA",
     copy: "Raw test scores normalized into structured profiles showing strengths and weaknesses across four main traits.",
-    points: ["4-trait profile", "39 data points tracked", "Week-over-week tracking"],
+    points: ["4-trait profile", "38 data points tracked", "Week-over-week tracking"],
     icon: Brain,
     cta: "See Player DNA",
   },

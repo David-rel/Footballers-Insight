@@ -78,16 +78,18 @@ export default function Sidebar() {
       return userRole === "owner" || userRole === "admin";
     }
     if (item.path === "/dashboard/teams") {
-      // Players cannot access teams
-      return userRole !== "player";
+      // Players/parents cannot access teams
+      return userRole !== "player" && userRole !== "parent";
     }
     if (item.path === "/dashboard/curriculums") {
-      // Coaches and players cannot access curriculums
-      return userRole !== "coach" && userRole !== "player";
+      // Coaches, players, and parents cannot access curriculums
+      return (
+        userRole !== "coach" && userRole !== "player" && userRole !== "parent"
+      );
     }
     if (item.path === "/dashboard/ai-stats") {
-      // Players cannot access AI stats dashboard
-      return userRole !== "player";
+      // Players/parents cannot access AI stats dashboard
+      return userRole !== "player" && userRole !== "parent";
     }
     return true;
   });
@@ -149,4 +151,3 @@ export default function Sidebar() {
     </div>
   );
 }
-

@@ -79,7 +79,7 @@ export async function GET(
     const playerResult = await pool.query(
       `SELECT 
         p.id,
-        p.user_id,
+        p.parent_user_id,
         p.team_id,
         p.first_name,
         p.last_name,
@@ -88,6 +88,7 @@ export async function GET(
         p.gender,
         p.dominant_foot,
         p.notes,
+        p.self_supervised,
         p.created_at,
         p.updated_at,
         u.email,
@@ -95,7 +96,7 @@ export async function GET(
         u.onboarded,
         u.image_url
       FROM players p
-      JOIN users u ON p.user_id = u.id
+      JOIN users u ON p.parent_user_id = u.id
       WHERE p.id = $1 AND p.team_id = $2`,
       [playerId, teamId]
     );
@@ -106,8 +107,8 @@ export async function GET(
 
     const row = playerResult.rows[0];
     
-    // Players can only view their own player records
-    if (userRole === "player" && row.user_id !== session.user.id) {
+    // Parents/players can only view player records they supervise
+    if ((userRole === "player" || userRole === "parent") && row.parent_user_id !== session.user.id) {
       return NextResponse.json(
         { error: "Access denied" },
         { status: 403 }
@@ -116,7 +117,7 @@ export async function GET(
     
     const player = {
       id: row.id,
-      userId: row.user_id,
+      parentUserId: row.parent_user_id,
       teamId: row.team_id,
       firstName: row.first_name,
       lastName: row.last_name,
@@ -125,6 +126,7 @@ export async function GET(
       gender: row.gender,
       dominantFoot: row.dominant_foot,
       notes: row.notes,
+      selfSupervised: row.self_supervised,
       email: row.email,
       emailVerified: row.email_verified,
       onboarded: row.onboarded,
@@ -217,7 +219,7 @@ export async function PUT(
 
     // Verify player exists and belongs to this team
     const playerCheck = await pool.query(
-      "SELECT id, user_id FROM players WHERE id = $1 AND team_id = $2",
+      "SELECT id, parent_user_id FROM players WHERE id = $1 AND team_id = $2",
       [playerId, teamId]
     );
 
@@ -225,8 +227,8 @@ export async function PUT(
       return NextResponse.json({ error: "Player not found" }, { status: 404 });
     }
 
-    // Players can only update their own player records
-    if (userRole === "player" && playerCheck.rows[0].user_id !== session.user.id) {
+    // Parents/players can only update player records they supervise
+    if ((userRole === "player" || userRole === "parent") && playerCheck.rows[0].parent_user_id !== session.user.id) {
       return NextResponse.json(
         { error: "Access denied" },
         { status: 403 }
@@ -312,8 +314,8 @@ export async function DELETE(
 
     const team = teamResult.rows[0];
 
-    // Players and coaches cannot delete players
-    if (userRole === "player" || userRole === "coach") {
+    // Players/parents and coaches cannot delete players
+    if (userRole === "player" || userRole === "parent" || userRole === "coach") {
       return NextResponse.json(
         { error: "Access denied" },
         { status: 403 }

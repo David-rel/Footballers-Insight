@@ -26,15 +26,12 @@ export async function GET(request: NextRequest) {
     }
 
     const userRole = userResult.rows[0].role;
-    
-    // Players cannot access teams
-    if (userRole === "player") {
-      return NextResponse.json(
-        { error: "Access denied" },
-        { status: 403 }
-      );
+
+    // Players/parents cannot access teams
+    if (userRole === "player" || userRole === "parent") {
+      return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
-    
+
     let companyId: string | null = userResult.rows[0].company_id;
 
     // If owner, get company from companies table
@@ -68,10 +65,12 @@ export async function GET(request: NextRequest) {
         c.description as curriculum_description,
         c.tests as curriculum_tests,
         u.name as coach_name,
-        u.email as coach_email
+        u.email as coach_email,
+        COUNT(p.id) as player_count
       FROM teams t
       LEFT JOIN curriculums c ON t.curriculum_id = c.id
       LEFT JOIN users u ON t.coach_id = u.id
+      LEFT JOIN players p ON t.id = p.team_id
       WHERE t.company_id = $1
     `;
 
@@ -82,7 +81,7 @@ export async function GET(request: NextRequest) {
       queryParams.push(session.user.id);
     }
 
-    teamsQuery += ` ORDER BY t.created_at DESC`;
+    teamsQuery += ` GROUP BY t.id, c.name, c.description, c.tests, u.name, u.email ORDER BY t.created_at DESC`;
 
     const teamsResult = await pool.query(teamsQuery, queryParams);
 
@@ -118,6 +117,7 @@ export async function GET(request: NextRequest) {
               email: row.coach_email,
             }
           : null,
+        playerCount: parseInt(row.player_count) || 0,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
       };
@@ -168,15 +168,12 @@ export async function POST(request: NextRequest) {
     }
 
     const userRole = userResult.rows[0].role;
-    
+
     // Players and coaches cannot create teams
     if (userRole === "player" || userRole === "coach") {
-      return NextResponse.json(
-        { error: "Access denied" },
-        { status: 403 }
-      );
+      return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
-    
+
     let companyId: string | null = userResult.rows[0].company_id;
 
     // Handle image upload

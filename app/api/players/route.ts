@@ -44,11 +44,11 @@ export async function GET(request: NextRequest) {
 
     // Build query to get all players with team and coach information
     // For coaches, only show players from their teams
-    // For players, only show their own player records
+    // For parents/players, only show player records they supervise
     let playersQuery = `
       SELECT 
         p.id,
-        p.user_id,
+        p.parent_user_id,
         p.team_id,
         p.first_name,
         p.last_name,
@@ -57,6 +57,7 @@ export async function GET(request: NextRequest) {
         p.gender,
         p.dominant_foot,
         p.notes,
+        p.self_supervised,
         p.created_at,
         p.updated_at,
         u.email,
@@ -69,7 +70,7 @@ export async function GET(request: NextRequest) {
         coach.name as coach_name,
         coach.email as coach_email
       FROM players p
-      JOIN users u ON p.user_id = u.id
+      JOIN users u ON p.parent_user_id = u.id
       JOIN teams t ON p.team_id = t.id
       LEFT JOIN users coach ON t.coach_id = coach.id
       WHERE t.company_id = $1
@@ -77,9 +78,9 @@ export async function GET(request: NextRequest) {
 
     const queryParams: any[] = [companyId];
 
-    // If user is a player, only show their own player records
-    if (userRole === "player") {
-      playersQuery += ` AND p.user_id = $2`;
+    // If user is a parent/player, only show player records they supervise
+    if (userRole === "parent" || userRole === "player") {
+      playersQuery += ` AND p.parent_user_id = $2`;
       queryParams.push(session.user.id);
     }
     // If user is a coach, only show players from their teams
@@ -110,7 +111,7 @@ export async function GET(request: NextRequest) {
 
       return {
         id: row.id,
-        userId: row.user_id,
+        parentUserId: row.parent_user_id,
         teamId: row.team_id,
         firstName: row.first_name,
         lastName: row.last_name,
@@ -121,6 +122,7 @@ export async function GET(request: NextRequest) {
         gender: row.gender,
         dominantFoot: row.dominant_foot,
         notes: row.notes,
+        selfSupervised: row.self_supervised,
         email: row.email,
         emailVerified: row.email_verified,
         onboarded: row.onboarded,

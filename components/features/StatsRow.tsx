@@ -1,6 +1,6 @@
 const stats = [
   { label: "tests per session", value: "13" },
-  { label: "data points per player", value: "39" },
+  { label: "data points per player", value: "38" },
   { label: "main traits measured", value: "4" },
   { label: "affordable pricing", value: "Yes" },
 ];

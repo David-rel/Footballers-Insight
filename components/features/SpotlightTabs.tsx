@@ -11,7 +11,7 @@ const spotlight = [
       "13 repeatable tests measure power, technique, mobility, and decision-making. All scores tracked consistently.",
     bullets: [
       "13 standardized tests",
-      "39 data points per player",
+      "38 data points per player",
       "Progress tracked week-over-week",
     ],
   },

@@ -5,12 +5,12 @@ import AccessRoleCards from "@/components/features/AccessRoleCards";
 const features = [
   {
     title: "Test Tracking",
-    actions: ["13 standardized tests", "39 data points per player", "Progress over time"],
+    actions: ["13 standardized tests", "38 data points per player", "Progress over time"],
     detail: "Simple, repeatable tests that measure power, technique, mobility, and decision-making consistently.",
   },
   {
     title: "Player DNA",
-    actions: ["4-trait profiles", "39 data points tracked", "Visual progress charts"],
+    actions: ["4-trait profiles", "38 data points tracked", "Visual progress charts"],
     detail: "Raw test scores normalized into structured profiles showing strengths and weaknesses across four main traits.",
   },
   {

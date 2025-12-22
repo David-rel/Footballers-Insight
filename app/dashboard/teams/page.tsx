@@ -37,6 +37,7 @@ interface Team {
   curriculum: Curriculum | null;
   coachId: string | null;
   coach: Coach | null;
+  playerCount?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -309,7 +310,14 @@ export default function TeamsPage() {
               {/* Team Content */}
               <div className="p-6">
                 <div className="flex items-start justify-between mb-3">
-                  <h3 className="text-xl font-bold text-white">{team.name}</h3>
+                  <h3 className="text-xl font-bold text-white">
+                    {team.name}
+                    {team.playerCount !== undefined && (
+                      <span className="text-white/50 font-normal ml-2">
+                        ({team.playerCount})
+                      </span>
+                    )}
+                  </h3>
                   {userRole !== "coach" && (
                     <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                       <button

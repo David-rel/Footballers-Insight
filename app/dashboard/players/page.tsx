@@ -19,7 +19,7 @@ import Button from "@/components/ui/Button";
 
 interface Player {
   id: string;
-  userId: string;
+  parentUserId: string;
   teamId: string;
   firstName: string;
   lastName: string;
@@ -30,6 +30,7 @@ interface Player {
   gender: string | null;
   dominantFoot: string | null;
   notes: string | null;
+  selfSupervised?: boolean;
   email: string;
   emailVerified: boolean;
   onboarded: boolean;
@@ -581,22 +582,9 @@ export default function PlayersPage() {
                     }`}
                   >
                     <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        {player.imageUrl ? (
-                          <img
-                            src={player.imageUrl}
-                            alt={player.fullName}
-                            className="w-10 h-10 rounded-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#e3ca76] to-[#a78443] flex items-center justify-center">
-                            <User className="w-5 h-5 text-black" />
-                          </div>
-                        )}
-                        <div>
-                          <div className="text-white font-medium">
-                            {player.fullName}
-                          </div>
+                      <div>
+                        <div className="text-white font-medium">
+                          {player.fullName}
                         </div>
                       </div>
                     </td>
@@ -647,19 +635,8 @@ export default function PlayersPage() {
               }
               className="rounded-2xl border border-white/10 bg-black/60 p-6 hover:border-white/20 transition-colors cursor-pointer"
             >
-              <div className="flex items-start gap-4 mb-4">
-                {player.imageUrl ? (
-                  <img
-                    src={player.imageUrl}
-                    alt={player.fullName}
-                    className="w-16 h-16 rounded-full object-cover"
-                  />
-                ) : (
-                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[#e3ca76] to-[#a78443] flex items-center justify-center flex-shrink-0">
-                    <User className="w-8 h-8 text-black" />
-                  </div>
-                )}
-                <div className="flex-1 min-w-0">
+              <div className="mb-4">
+                <div className="min-w-0">
                   <h3 className="text-xl font-bold text-white truncate">
                     {player.fullName}
                   </h3>

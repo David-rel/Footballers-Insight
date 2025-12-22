@@ -12,7 +12,7 @@ const liveMetrics = [
   "Player DNA tracking active",
   "13 tests per session",
   "AI session plans ready",
-  "39 data points collected",
+  "38 data points collected",
   "Progress tracked weekly",
 ];
 

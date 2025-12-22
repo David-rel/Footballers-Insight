@@ -26,11 +26,19 @@ export default function DashboardLayout({
       return;
     }
 
-    // Check for players who need onboarding
-    if (session.user && (session.user as any).role === "player") {
+    // Check for parent/player users who need onboarding + incomplete player profiles
+    if (
+      session.user &&
+      ((session.user as any).role === "player" ||
+        (session.user as any).role === "parent")
+    ) {
       // First check if user themselves needs onboarding (password not set)
       if (!(session.user as any).onboarded) {
-        router.push("/onboarding/player");
+        router.push(
+          (session.user as any).role === "parent"
+            ? "/onboarding/parent"
+            : "/onboarding/player"
+        );
         return;
       }
 

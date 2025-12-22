@@ -16,14 +16,12 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    /* Dark Mode Colors */
-    --background: #0a0a0a;
-    --foreground: #ededed;
-    --gold: #a78443; /* Dark mode gold accent */
-    --gold-rgb: 167, 132, 67;
-  }
+.dark {
+  /* Dark Mode Colors */
+  --background: #0a0a0a;
+  --foreground: #ededed;
+  --gold: #a78443; /* Dark mode gold accent */
+  --gold-rgb: 167, 132, 67;
 }
 
 body {
@@ -57,16 +55,29 @@ a {
 .glow {
   position: absolute;
   inset: 0;
-  background: radial-gradient(circle at 20% 20%, rgba(var(--gold-rgb), 0.18), transparent 35%),
-    radial-gradient(circle at 80% 0%, rgba(var(--gold-rgb), 0.12), transparent 30%),
-    radial-gradient(circle at 40% 80%, rgba(var(--gold-rgb), 0.1), transparent 40%);
+  background: radial-gradient(
+      circle at 20% 20%,
+      rgba(var(--gold-rgb), 0.18),
+      transparent 35%
+    ),
+    radial-gradient(
+      circle at 80% 0%,
+      rgba(var(--gold-rgb), 0.12),
+      transparent 30%
+    ),
+    radial-gradient(
+      circle at 40% 80%,
+      rgba(var(--gold-rgb), 0.1),
+      transparent 40%
+    );
   filter: blur(12px);
   opacity: 0.7;
   z-index: 0;
 }
 
 .card-glow {
-  box-shadow: 0 0 0 1px rgba(var(--gold-rgb), 0.25), 0 20px 60px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 0 0 1px rgba(var(--gold-rgb), 0.25),
+    0 20px 60px rgba(0, 0, 0, 0.35);
 }
 
 @keyframes scroll {

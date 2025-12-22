@@ -97,7 +97,8 @@ CREATE TRIGGER update_teams_updated_at BEFORE UPDATE ON teams
 -- Players Table
 CREATE TABLE IF NOT EXISTS players (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    -- The login account that supervises this player (parent/guardian or self-supervised player)
+    parent_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     team_id UUID NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
     first_name VARCHAR(255) NOT NULL,
     last_name VARCHAR(255) NOT NULL,
@@ -106,16 +107,110 @@ CREATE TABLE IF NOT EXISTS players (
     gender VARCHAR(20),
     dominant_foot VARCHAR(10) CHECK (dominant_foot IN ('left', 'right', 'both')),
     notes TEXT,
+    -- If TRUE, the supervising account is the player themselves (still stored as a 'parent' role user)
+    self_supervised BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Create indexes for players
-CREATE INDEX IF NOT EXISTS idx_players_user_id ON players(user_id);
+CREATE INDEX IF NOT EXISTS idx_players_parent_user_id ON players(parent_user_id);
 CREATE INDEX IF NOT EXISTS idx_players_team_id ON players(team_id);
 
 -- Create trigger to automatically update updated_at
 DROP TRIGGER IF EXISTS update_players_updated_at ON players;
 CREATE TRIGGER update_players_updated_at BEFORE UPDATE ON players
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Evaluations Table
+CREATE TABLE IF NOT EXISTS evaluations (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    team_id UUID NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    created_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    one_v_one_rounds INTEGER DEFAULT 5,
+    skill_moves_count INTEGER DEFAULT 6,
+    scores JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create indexes for evaluations
+CREATE INDEX IF NOT EXISTS idx_evaluations_team_id ON evaluations(team_id);
+CREATE INDEX IF NOT EXISTS idx_evaluations_created_by ON evaluations(created_by);
+
+-- Create trigger to automatically update updated_at
+DROP TRIGGER IF EXISTS update_evaluations_updated_at ON evaluations;
+CREATE TRIGGER update_evaluations_updated_at BEFORE UPDATE ON evaluations
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Player Evaluations (per-player snapshot of an evaluation)
+CREATE TABLE IF NOT EXISTS player_evaluations (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    player_id UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    team_id UUID NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    evaluation_id UUID NOT NULL REFERENCES evaluations(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    coach_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    coach_name VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(player_id, evaluation_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_player_evaluations_player_id ON player_evaluations(player_id);
+CREATE INDEX IF NOT EXISTS idx_player_evaluations_team_id ON player_evaluations(team_id);
+CREATE INDEX IF NOT EXISTS idx_player_evaluations_evaluation_id ON player_evaluations(evaluation_id);
+
+DROP TRIGGER IF EXISTS update_player_evaluations_updated_at ON player_evaluations;
+CREATE TRIGGER update_player_evaluations_updated_at BEFORE UPDATE ON player_evaluations
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Test Scores: raw scores captured in the evaluation UI (per player evaluation)
+CREATE TABLE IF NOT EXISTS test_scores (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    player_evaluation_id UUID NOT NULL REFERENCES player_evaluations(id) ON DELETE CASCADE,
+    scores JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(player_evaluation_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_test_scores_player_evaluation_id ON test_scores(player_evaluation_id);
+
+DROP TRIGGER IF EXISTS update_test_scores_updated_at ON test_scores;
+CREATE TRIGGER update_test_scores_updated_at BEFORE UPDATE ON test_scores
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Overall Scores: computed (raw + extras) from compute-all route (per player evaluation)
+CREATE TABLE IF NOT EXISTS overall_scores (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    player_evaluation_id UUID NOT NULL REFERENCES player_evaluations(id) ON DELETE CASCADE,
+    scores JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(player_evaluation_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_overall_scores_player_evaluation_id ON overall_scores(player_evaluation_id);
+
+DROP TRIGGER IF EXISTS update_overall_scores_updated_at ON overall_scores;
+CREATE TRIGGER update_overall_scores_updated_at BEFORE UPDATE ON overall_scores
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Player DNA: normalized values (per player evaluation)
+CREATE TABLE IF NOT EXISTS player_dna (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    player_evaluation_id UUID NOT NULL REFERENCES player_evaluations(id) ON DELETE CASCADE,
+    dna JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(player_evaluation_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_player_dna_player_evaluation_id ON player_dna(player_evaluation_id);
+
+DROP TRIGGER IF EXISTS update_player_dna_updated_at ON player_dna;
+CREATE TRIGGER update_player_dna_updated_at BEFORE UPDATE ON player_dna
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 

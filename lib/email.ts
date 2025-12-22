@@ -104,12 +104,12 @@ export async function sendAdminInvitationEmail(
 
 export async function sendPlayerInvitationEmail(
   email: string,
-  firstName: string,
-  lastName: string,
+  parentName: string,
   playerName: string,
   teamName: string,
   password: string,
-  loginUrl: string
+  loginUrl: string,
+  isSelfSupervised: boolean = false
 ) {
   if (!gmailUser || !gmailPass) {
     console.error("Gmail credentials not configured. Cannot send email.");
@@ -123,9 +123,13 @@ export async function sendPlayerInvitationEmail(
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #e3ca76;">Welcome to Footballers Insight!</h2>
-        <p>Hi ${firstName},</p>
-        <p><strong>${playerName}</strong> has been added to <strong>${teamName}</strong> as a player on Footballers Insight.</p>
-        <p>Your account has been created with the following credentials:</p>
+        <p>Hello ${parentName},</p>
+        ${
+          isSelfSupervised
+            ? `<p>You have been added to <strong>${teamName}</strong> on Footballers Insight.</p>`
+            : `<p>We have added <strong>${playerName}</strong> to <strong>${teamName}</strong> on Footballers Insight.</p>`
+        }
+        <p>Your account has been created with the following login details:</p>
         <div style="background-color: #1a1a1a; padding: 20px; margin: 20px 0; border-radius: 8px;">
           <p style="margin: 10px 0; color: #ffffff;"><strong style="color: #e3ca76;">Email:</strong> <span style="color: #ffffff;">${email}</span></p>
           <p style="margin: 10px 0; color: #ffffff;"><strong style="color: #e3ca76;">Temporary Password:</strong> <span style="color: #ffffff; font-family: monospace;">${password}</span></p>
@@ -135,7 +139,7 @@ export async function sendPlayerInvitationEmail(
           <a href="${loginUrl}" style="background-color: #e3ca76; color: #000; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block; font-size: 16px; box-shadow: 0 4px 12px rgba(227, 202, 118, 0.3);">Log In Now</a>
         </div>
         <p style="text-align: center; color: #888; font-size: 12px; margin-top: 10px;">Or copy and paste this link: <a href="${loginUrl}" style="color: #e3ca76;">${loginUrl}</a></p>
-        <p style="color: #888; font-size: 12px; margin-top: 30px;"><strong>Important:</strong> You will be asked to create a new password and complete ${playerName}'s profile information when you log in for the first time.</p>
+        <p style="color: #888; font-size: 12px; margin-top: 30px;"><strong>Next:</strong> After you log in, you’ll complete your profile and then finish ${playerName}'s player profile information.</p>
         <p style="color: #888; font-size: 12px; margin-top: 30px;">Footballers Insight Team</p>
       </div>
     `,
@@ -153,7 +157,7 @@ export async function sendPlayerInvitationEmail(
 
 export async function sendPlayerAddedNotificationEmail(
   email: string,
-  firstName: string,
+  parentName: string,
   playerName: string,
   teamName: string,
   loginUrl: string
@@ -169,15 +173,15 @@ export async function sendPlayerAddedNotificationEmail(
     subject: `${playerName} has been added to ${teamName} on Footballers Insight`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #e3ca76;">New Player Added</h2>
-        <p>Hi ${firstName},</p>
-        <p><strong>${playerName}</strong> has been added to <strong>${teamName}</strong> on Footballers Insight.</p>
-        <p>You can now log in to your existing account to complete ${playerName}'s profile information.</p>
+        <h2 style="color: #e3ca76;">Player Added</h2>
+        <p>Hello ${parentName},</p>
+        <p>We have added <strong>${playerName}</strong> to <strong>${teamName}</strong> on Footballers Insight.</p>
+        <p>You can log in to your account to manage and complete ${playerName}'s player profile.</p>
         <div style="text-align: center; margin: 30px 0;">
           <a href="${loginUrl}" style="background-color: #e3ca76; color: #000; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block; font-size: 16px; box-shadow: 0 4px 12px rgba(227, 202, 118, 0.3);">Log In Now</a>
         </div>
         <p style="text-align: center; color: #888; font-size: 12px; margin-top: 10px;">Or copy and paste this link: <a href="${loginUrl}" style="color: #e3ca76;">${loginUrl}</a></p>
-        <p style="color: #888; font-size: 12px; margin-top: 30px;">Please log in and complete ${playerName}'s profile information (date of birth, gender, dominant foot, etc.) when you have a chance.</p>
+        <p style="color: #888; font-size: 12px; margin-top: 30px;">If you haven’t yet, please log in to complete any missing player details (date of birth, gender, dominant foot, etc.).</p>
         <p style="color: #888; font-size: 12px; margin-top: 30px;">Footballers Insight Team</p>
       </div>
     `,

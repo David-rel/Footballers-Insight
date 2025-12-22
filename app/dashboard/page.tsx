@@ -81,9 +81,15 @@ export default function DashboardPage() {
     if (checking) return;
     if (needsOnboarding && emailVerified === true) {
       hasOnboardingRedirectedRef.current = true;
-      window.location.href = "/onboarding";
+      const role = userRole;
+      window.location.href =
+        role === "parent"
+          ? "/onboarding/parent"
+          : role === "player"
+            ? "/onboarding/player"
+            : "/onboarding";
     }
-  }, [needsOnboarding, emailVerified, checking]);
+  }, [needsOnboarding, emailVerified, checking, userRole]);
 
   if (status === "loading" || checking) {
     return (

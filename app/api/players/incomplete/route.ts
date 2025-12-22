@@ -14,11 +14,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
-    // Get all players for this user that are missing required fields
+    // Get all players for this supervising user that are missing required fields
     const incompletePlayers = await pool.query(
       `SELECT 
         p.id,
         p.team_id,
+        p.parent_user_id,
         p.first_name,
         p.last_name,
         p.dob,
@@ -27,7 +28,7 @@ export async function GET(request: NextRequest) {
         t.name as team_name
       FROM players p
       JOIN teams t ON p.team_id = t.id
-      WHERE p.user_id = $1 
+      WHERE p.parent_user_id = $1 
         AND (p.dob IS NULL OR p.gender IS NULL OR p.dominant_foot IS NULL)
       ORDER BY p.created_at ASC
       LIMIT 1`,

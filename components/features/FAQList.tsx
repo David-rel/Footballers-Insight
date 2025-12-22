@@ -1,11 +1,11 @@
 const faqs = [
   {
     q: "What tests do you run?",
-    a: "We run 13 standardized tests covering shot power, serve distance, dribbling, passing, 1v1 performance, juggling, skill moves, agility, reaction time, single-leg hops, jump endurance, ankle flexibility, and core strength. These create 39 data points per player.",
+    a: "We run 13 standardized tests covering shot power, serve distance, dribbling, passing, 1v1 performance, juggling, skill moves, agility, reaction time, single-leg hops, jump endurance, ankle flexibility, and core strength. These create 38 data points per player.",
   },
   {
     q: "How does Player DNA work?",
-    a: "Raw test scores are combined into a complete player profile with 39 data points. This shows each player's strengths and weaknesses across four main traits: Power/Strength, Technique/Control, Mobility/Stability, and Decision/Cognition.",
+    a: "Raw test scores are combined into a complete player profile with 38 data points. This shows each player's strengths and weaknesses across four main traits: Power/Strength, Technique/Control, Mobility/Stability, and Decision/Cognition.",
   },
   {
     q: "How does AI generate session plans?",

@@ -20,7 +20,7 @@ import Button from "@/components/ui/Button";
 
 interface Player {
   id: string;
-  userId: string;
+  parentUserId: string;
   teamId: string;
   firstName: string;
   lastName: string;
@@ -29,6 +29,7 @@ interface Player {
   gender: string | null;
   dominantFoot: string | null;
   notes: string | null;
+  selfSupervised?: boolean;
   email: string;
   emailVerified: boolean;
   onboarded: boolean;
@@ -92,8 +93,8 @@ export default function PlayerDetailPage() {
 
   async function fetchTeamData() {
     try {
-      // Players cannot access teams API, so skip fetching team data for them
-      if (userRole === "player") {
+      // Players/parents cannot access teams API, so skip fetching team data for them
+      if (userRole === "player" || userRole === "parent") {
         return;
       }
       
@@ -207,7 +208,7 @@ export default function PlayerDetailPage() {
       }
 
       // Redirect based on user role
-      if (userRole === "player") {
+      if (userRole === "player" || userRole === "parent") {
         router.push("/dashboard/players");
       } else {
         router.push(`/dashboard/teams/${teamId}`);
@@ -238,14 +239,16 @@ export default function PlayerDetailPage() {
           <p className="text-red-400 mb-4">{error}</p>
           <Button 
             onClick={() => {
-              if (userRole === "player") {
+              if (userRole === "player" || userRole === "parent") {
                 router.push("/dashboard/players");
               } else {
                 router.push(`/dashboard/teams/${teamId}`);
               }
             }}
           >
-            {userRole === "player" ? "Back to Players" : "Back to Team"}
+            {userRole === "player" || userRole === "parent"
+              ? "Back to Players"
+              : "Back to Team"}
           </Button>
         </div>
       </div>
