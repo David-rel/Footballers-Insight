@@ -4,7 +4,16 @@ import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import { useTheme } from "next-themes";
-import { Moon, Sun, User, Settings, LogOut, ChevronDown } from "lucide-react";
+import {
+  Moon,
+  Sun,
+  User,
+  Settings,
+  LogOut,
+  ChevronDown,
+  Menu,
+  X,
+} from "lucide-react";
 
 interface UserProfile {
   user: {
@@ -23,7 +32,13 @@ interface UserProfile {
   } | null;
 }
 
-export default function TopBar() {
+export default function TopBar({
+  isMenuOpen,
+  onMenuClick,
+}: {
+  isMenuOpen?: boolean;
+  onMenuClick?: () => void;
+}) {
   const { data: session } = useSession();
   const router = useRouter();
   const { theme, setTheme } = useTheme();
@@ -83,8 +98,21 @@ export default function TopBar() {
 
   return (
     <div className="fixed top-0 left-0 right-0 h-16 bg-black/60 backdrop-blur-md border-b border-white/10 z-50 flex items-center justify-between px-6">
-      <div className="flex-1" />
-      
+      <div className="flex items-center gap-3 flex-1">
+        <button
+          type="button"
+          onClick={onMenuClick}
+          className="md:hidden p-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-colors"
+          aria-label={isMenuOpen ? "Close sidebar" : "Open sidebar"}
+        >
+          {isMenuOpen ? (
+            <X className="w-5 h-5 text-white/80" />
+          ) : (
+            <Menu className="w-5 h-5 text-white/80" />
+          )}
+        </button>
+      </div>
+
       <div className="flex items-center gap-4">
         {/* Theme Toggle */}
         {mounted && (
@@ -159,4 +187,3 @@ export default function TopBar() {
     </div>
   );
 }
-

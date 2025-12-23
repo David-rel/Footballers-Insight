@@ -14,10 +14,21 @@ export default function DashboardLayout({
   const { data: session, status } = useSession();
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Prevent background scrolling when the mobile sidebar is open
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [sidebarOpen]);
 
   useEffect(() => {
     if (status === "loading") return;
@@ -76,9 +87,12 @@ export default function DashboardLayout({
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_20%_-10%,rgba(var(--gold-rgb),0.08),transparent_35%),radial-gradient(circle_at_80%_0%,rgba(var(--gold-rgb),0.05),transparent_25%),#050505]">
-      <TopBar />
-      <Sidebar />
-      <main className="ml-64 mt-16 p-6">{children}</main>
+      <TopBar
+        isMenuOpen={sidebarOpen}
+        onMenuClick={() => setSidebarOpen((v) => !v)}
+      />
+      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <main className="mt-16 p-6 md:ml-64">{children}</main>
     </div>
   );
 }

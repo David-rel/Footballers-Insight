@@ -13,6 +13,7 @@ import {
   UserCog,
   Users2,
   BookOpen,
+  ClipboardList,
 } from "lucide-react";
 
 interface CompanyInfo {
@@ -28,7 +29,13 @@ interface NavItem {
   path: string;
 }
 
-export default function Sidebar() {
+export default function Sidebar({
+  isOpen,
+  onClose,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const [company, setCompany] = useState<CompanyInfo | null>(null);
@@ -65,6 +72,11 @@ export default function Sidebar() {
       path: "/dashboard/ai-stats",
     },
     {
+      label: "Session Plans",
+      icon: ClipboardList,
+      path: "/dashboard/session-plans",
+    },
+    {
       label: "Players",
       icon: UserCircle,
       path: "/dashboard/players",
@@ -77,6 +89,13 @@ export default function Sidebar() {
     if (role === "owner" || role === "admin") return "Company AI Analysis";
     if (role === "player" || role === "parent") return "Player Analysis";
     return "AI Analysis";
+  }
+
+  function sessionPlansLabelForRole(role: string | null) {
+    if (role === "coach") return "Session Plans";
+    if (role === "player" || role === "parent") return "Activity Generator";
+    if (role === "owner" || role === "admin") return "Sessions & Activities";
+    return "Sessions & Activities";
   }
 
   // Filter nav items based on role
@@ -97,65 +116,90 @@ export default function Sidebar() {
       // Everyone can access AI analysis (content differs by role)
       return true;
     }
+    if (item.path === "/dashboard/session-plans") {
+      // Everyone sees it, label changes by role
+      return true;
+    }
     return true;
   });
 
   return (
-    <div className="fixed left-0 top-16 bottom-0 w-64 bg-black/60 backdrop-blur-md border-r border-white/10 z-40 flex flex-col">
-      {/* Company Logo & Name */}
-      <div className="p-4 border-b border-white/10">
-        {loading ? (
-          <div className="h-16 bg-white/5 rounded-xl animate-pulse" />
-        ) : (
-          <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors border border-white/10">
-            {company?.logo ? (
-              <img
-                src={company.logo}
-                alt={company.name || "Company"}
-                className="w-12 h-12 rounded-lg object-cover flex-shrink-0 border border-white/10"
-              />
-            ) : (
-              <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-[#e3ca76] to-[#a78443] flex items-center justify-center flex-shrink-0 border border-white/10">
-                <Building2 className="w-6 h-6 text-black" />
-              </div>
-            )}
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-white truncate">
-                {company?.name || "Company"}
-              </p>
-              {company?.websiteUrl && (
-                <p className="text-xs text-white/50 truncate">
-                  {company.websiteUrl.replace(/^https?:\/\//, "")}
-                </p>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
+    <>
+      {/* Mobile backdrop */}
+      {isOpen && (
+        <button
+          type="button"
+          aria-label="Close sidebar"
+          onClick={onClose}
+          className="fixed inset-0 top-16 bg-black/60 z-40 md:hidden"
+        />
+      )}
 
-      {/* Navigation Items */}
-      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = pathname === item.path;
-          return (
-            <button
-              key={item.path}
-              onClick={() => router.push(item.path)}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-                isActive
-                  ? "bg-[#e3ca76]/20 text-[#e3ca76] border border-[#e3ca76]/30"
-                  : "text-white/70 hover:bg-white/5 hover:text-white"
-              }`}
-            >
-              <Icon className="w-5 h-5" />
-              {item.path === "/dashboard/ai-stats"
-                ? aiLabelForRole(userRole)
-                : item.label}
-            </button>
-          );
-        })}
-      </nav>
-    </div>
+      <div
+        className={`fixed left-0 top-16 bottom-0 w-64 bg-black/60 backdrop-blur-md border-r border-white/10 z-50 flex flex-col transform transition-transform duration-200 ease-out ${
+          isOpen ? "translate-x-0" : "-translate-x-full"
+        } md:translate-x-0`}
+      >
+        {/* Company Logo & Name */}
+        <div className="p-4 border-b border-white/10">
+          {loading ? (
+            <div className="h-16 bg-white/5 rounded-xl animate-pulse" />
+          ) : (
+            <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors border border-white/10">
+              {company?.logo ? (
+                <img
+                  src={company.logo}
+                  alt={company.name || "Company"}
+                  className="w-12 h-12 rounded-lg object-cover flex-shrink-0 border border-white/10"
+                />
+              ) : (
+                <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-[#e3ca76] to-[#a78443] flex items-center justify-center flex-shrink-0 border border-white/10">
+                  <Building2 className="w-6 h-6 text-black" />
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-white truncate">
+                  {company?.name || "Company"}
+                </p>
+                {company?.websiteUrl && (
+                  <p className="text-xs text-white/50 truncate">
+                    {company.websiteUrl.replace(/^https?:\/\//, "")}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Navigation Items */}
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = pathname === item.path;
+            return (
+              <button
+                key={item.path}
+                onClick={() => {
+                  router.push(item.path);
+                  onClose();
+                }}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+                  isActive
+                    ? "bg-[#e3ca76]/20 text-[#e3ca76] border border-[#e3ca76]/30"
+                    : "text-white/70 hover:bg-white/5 hover:text-white"
+                }`}
+              >
+                <Icon className="w-5 h-5" />
+                {item.path === "/dashboard/ai-stats"
+                  ? aiLabelForRole(userRole)
+                  : item.path === "/dashboard/session-plans"
+                  ? sessionPlansLabelForRole(userRole)
+                  : item.label}
+              </button>
+            );
+          })}
+        </nav>
+      </div>
+    </>
   );
 }
