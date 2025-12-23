@@ -19,6 +19,7 @@ import {
   ClipboardList,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
+import TeamLeaderboardsPanel from "@/components/features/TeamLeaderboardsPanel";
 
 interface Curriculum {
   id: string;
@@ -110,11 +111,22 @@ export default function TeamDetailPage() {
   });
 
   useEffect(() => {
-    fetchTeam();
     fetchUserRole();
+  }, [teamId]);
+
+  useEffect(() => {
+    if (!userRole) return;
+
+    // Players/parents are not allowed on this page
+    if (userRole === "player" || userRole === "parent") {
+      setLoading(false);
+      return;
+    }
+
+    fetchTeam();
     fetchPlayers();
     fetchEvaluations();
-  }, [teamId]);
+  }, [teamId, userRole]);
 
   // NOTE: We intentionally do NOT allow selecting an existing parent account here,
   // to avoid exposing other parents in the company to coaches/staff.
@@ -265,6 +277,24 @@ export default function TeamDetailPage() {
     );
   }
 
+  if (userRole === "player" || userRole === "parent") {
+    return (
+      <div className="max-w-3xl mx-auto">
+        <div className="rounded-2xl border border-white/10 bg-black/60 p-8 text-center">
+          <h1 className="text-2xl font-bold text-white mb-2">
+            You don’t have access to this page
+          </h1>
+          <p className="text-white/70 mb-6">
+            This team page is for coaches and staff. Go back to see your players.
+          </p>
+          <Button onClick={() => router.push("/dashboard/players")}>
+            Back to My Players
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   if (!team) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -401,6 +431,11 @@ export default function TeamDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Leaderboards */}
+      {(userRole === "coach" || userRole === "owner" || userRole === "admin") && (
+        <TeamLeaderboardsPanel teamId={teamId} />
+      )}
 
       {/* Evaluations Section */}
       {(userRole === "coach" || userRole === "owner" || userRole === "admin") && (

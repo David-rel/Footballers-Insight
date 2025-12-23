@@ -114,9 +114,10 @@ export async function PUT(
         );
       }
 
-      if (coach.role !== "coach") {
+      // Allow coaches, admins, and owners to be assigned as coaches
+      if (!["coach", "admin", "owner"].includes(coach.role)) {
         return NextResponse.json(
-          { error: "Selected user is not a coach" },
+          { error: "Selected user cannot be assigned as a coach" },
           { status: 400 }
         );
       }

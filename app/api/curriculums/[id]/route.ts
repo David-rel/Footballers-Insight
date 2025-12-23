@@ -17,17 +17,21 @@ export async function PUT(
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
-    // Coaches, players, and parents cannot update curriculums
+    // Get user role
     const userResult = await pool.query(
       "SELECT role FROM users WHERE id = $1",
       [session.user.id]
     );
 
-    if (userResult.rows.length > 0) {
-      const role = userResult.rows[0].role;
-      if (role === "coach" || role === "player" || role === "parent") {
-        return NextResponse.json({ error: "Access denied" }, { status: 403 });
-      }
+    if (userResult.rows.length === 0) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    const role = userResult.rows[0].role;
+
+    // Players and parents cannot update curriculums
+    if (role === "player" || role === "parent") {
+      return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
 
     const { id } = await params;
@@ -50,9 +54,9 @@ export async function PUT(
       );
     }
 
-    // Verify curriculum exists
+    // Verify curriculum exists and check permissions
     const curriculumResult = await pool.query(
-      "SELECT id FROM curriculums WHERE id = $1",
+      "SELECT id, created_by FROM curriculums WHERE id = $1",
       [curriculumId]
     );
 
@@ -60,6 +64,17 @@ export async function PUT(
       return NextResponse.json(
         { error: "Curriculum not found" },
         { status: 404 }
+      );
+    }
+
+    const existingCurriculum = curriculumResult.rows[0];
+
+    // Coaches can only update curriculums they created
+    // Admins and owners can update any curriculum
+    if (role === "coach" && existingCurriculum.created_by !== session.user.id) {
+      return NextResponse.json(
+        { error: "You can only update curriculums you created" },
+        { status: 403 }
       );
     }
 
@@ -71,7 +86,7 @@ export async function PUT(
            tests = COALESCE($3::jsonb, tests),
            updated_at = CURRENT_TIMESTAMP
        WHERE id = $4
-       RETURNING id, name, description, tests, created_at, updated_at`,
+       RETURNING id, name, description, tests, created_by, created_at, updated_at`,
       [
         name || null,
         description !== undefined ? description : null,
@@ -95,6 +110,7 @@ export async function PUT(
           name: curriculum.name,
           description: curriculum.description,
           tests: testsArray,
+          createdBy: curriculum.created_by,
           createdAt: curriculum.created_at,
           updatedAt: curriculum.updated_at,
         },
@@ -122,25 +138,29 @@ export async function DELETE(
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
-    // Coaches, players, and parents cannot delete curriculums
+    // Get user role
     const userResult = await pool.query(
       "SELECT role FROM users WHERE id = $1",
       [session.user.id]
     );
 
-    if (userResult.rows.length > 0) {
-      const role = userResult.rows[0].role;
-      if (role === "coach" || role === "player" || role === "parent") {
-        return NextResponse.json({ error: "Access denied" }, { status: 403 });
-      }
+    if (userResult.rows.length === 0) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    const role = userResult.rows[0].role;
+
+    // Players and parents cannot delete curriculums
+    if (role === "player" || role === "parent") {
+      return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
 
     const { id } = await params;
     const curriculumId = id;
 
-    // Verify curriculum exists
+    // Verify curriculum exists and check permissions
     const curriculumResult = await pool.query(
-      "SELECT id FROM curriculums WHERE id = $1",
+      "SELECT id, created_by FROM curriculums WHERE id = $1",
       [curriculumId]
     );
 
@@ -148,6 +168,17 @@ export async function DELETE(
       return NextResponse.json(
         { error: "Curriculum not found" },
         { status: 404 }
+      );
+    }
+
+    const existingCurriculum = curriculumResult.rows[0];
+
+    // Coaches can only delete curriculums they created
+    // Admins and owners can delete any curriculum
+    if (role === "coach" && existingCurriculum.created_by !== session.user.id) {
+      return NextResponse.json(
+        { error: "You can only delete curriculums you created" },
+        { status: 403 }
       );
     }
 

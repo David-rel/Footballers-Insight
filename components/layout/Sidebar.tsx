@@ -60,7 +60,7 @@ export default function Sidebar() {
     { label: "Teams", icon: Users2, path: "/dashboard/teams" },
     { label: "Curriculums", icon: BookOpen, path: "/dashboard/curriculums" },
     {
-      label: "AI Stats Dashboard",
+      label: "AI Analysis",
       icon: BarChart3,
       path: "/dashboard/ai-stats",
     },
@@ -72,6 +72,13 @@ export default function Sidebar() {
     { label: "Settings", icon: Settings, path: "/dashboard/settings" },
   ];
 
+  function aiLabelForRole(role: string | null) {
+    if (role === "coach") return "Team AI Analysis";
+    if (role === "owner" || role === "admin") return "Company AI Analysis";
+    if (role === "player" || role === "parent") return "Player Analysis";
+    return "AI Analysis";
+  }
+
   // Filter nav items based on role
   const navItems = allNavItems.filter((item) => {
     if (item.path === "/dashboard/members") {
@@ -82,14 +89,13 @@ export default function Sidebar() {
       return userRole !== "player" && userRole !== "parent";
     }
     if (item.path === "/dashboard/curriculums") {
-      // Coaches, players, and parents cannot access curriculums
-      return (
-        userRole !== "coach" && userRole !== "player" && userRole !== "parent"
-      );
+      // Players and parents cannot access curriculums
+      // Coaches can now access curriculums (only their own)
+      return userRole !== "player" && userRole !== "parent";
     }
     if (item.path === "/dashboard/ai-stats") {
-      // Players/parents cannot access AI stats dashboard
-      return userRole !== "player" && userRole !== "parent";
+      // Everyone can access AI analysis (content differs by role)
+      return true;
     }
     return true;
   });
@@ -143,7 +149,9 @@ export default function Sidebar() {
               }`}
             >
               <Icon className="w-5 h-5" />
-              {item.label}
+              {item.path === "/dashboard/ai-stats"
+                ? aiLabelForRole(userRole)
+                : item.label}
             </button>
           );
         })}

@@ -126,10 +126,14 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const client = await pool.connect();
+  let clientReleased = false;
   try {
     const session = await auth();
 
     if (!session || !session.user?.email || !session.user?.id) {
+      clientReleased = true;
+      client.release();
       return new NextResponse("error Not authenticated\n", {
         status: 401,
         headers: { "content-type": "text/plain; charset=utf-8" },
@@ -140,12 +144,14 @@ export async function POST(
     const teamId = id;
 
     // Get user's role and company_id
-    const userResult = await pool.query(
+    const userResult = await client.query(
       "SELECT role, company_id FROM users WHERE id = $1",
       [session.user.id]
     );
 
     if (userResult.rows.length === 0) {
+      clientReleased = true;
+      client.release();
       return new NextResponse("error User not found\n", {
         status: 404,
         headers: { "content-type": "text/plain; charset=utf-8" },
@@ -156,6 +162,8 @@ export async function POST(
 
     // Players/parents cannot compute test data
     if (userRole === "player" || userRole === "parent") {
+      clientReleased = true;
+      client.release();
       return new NextResponse("error Access denied\n", {
         status: 403,
         headers: { "content-type": "text/plain; charset=utf-8" },
@@ -166,7 +174,7 @@ export async function POST(
 
     // If owner, get company from companies table
     if (userRole === "owner" && !companyId) {
-      const companyResult = await pool.query(
+      const companyResult = await client.query(
         "SELECT id FROM companies WHERE owner_id = $1",
         [session.user.id]
       );
@@ -176,6 +184,8 @@ export async function POST(
     }
 
     if (!companyId) {
+      clientReleased = true;
+      client.release();
       return new NextResponse("error Company not found\n", {
         status: 404,
         headers: { "content-type": "text/plain; charset=utf-8" },
@@ -187,12 +197,14 @@ export async function POST(
     let normalizationScope: "team" | "company" = "team";
 
     // Verify team exists and belongs to user's company
-    const teamResult = await pool.query(
+    const teamResult = await client.query(
       "SELECT id, company_id, coach_id FROM teams WHERE id = $1",
       [teamId]
     );
 
     if (teamResult.rows.length === 0) {
+      clientReleased = true;
+      client.release();
       return new NextResponse("error Team not found\n", {
         status: 404,
         headers: { "content-type": "text/plain; charset=utf-8" },
@@ -203,6 +215,8 @@ export async function POST(
 
     // Coaches can only compute for their own teams
     if (userRole === "coach" && team.coach_id !== session.user.id) {
+      clientReleased = true;
+      client.release();
       return new NextResponse("error Unauthorized to compute for this team\n", {
         status: 403,
         headers: { "content-type": "text/plain; charset=utf-8" },
@@ -211,18 +225,24 @@ export async function POST(
 
     // Owners/admins can only compute for teams in their company
     if (userRole !== "coach" && team.company_id !== companyId) {
+      clientReleased = true;
+      client.release();
       return new NextResponse("error Unauthorized to compute for this team\n", {
         status: 403,
         headers: { "content-type": "text/plain; charset=utf-8" },
       });
     }
 
-    const evaluationsResult = await pool.query(
+    const evaluationsResult = await client.query(
       "SELECT id, team_id, created_by, name, created_at, one_v_one_rounds, skill_moves_count, scores FROM evaluations WHERE team_id = $1 ORDER BY created_at DESC",
       [teamId]
     );
 
-    const playersResult = await pool.query(
+    // Compute ONLY the most recent evaluation, but keep all evaluations in-memory
+    // for team-wide min/max (normalization context).
+    const evaluationsToCompute = evaluationsResult.rows.slice(0, 1);
+
+    const playersResult = await client.query(
       "SELECT id, first_name, last_name, dob FROM players WHERE team_id = $1",
       [teamId]
     );
@@ -242,8 +262,10 @@ export async function POST(
     console.log(
       "[compute-all] team:",
       teamId,
-      "evaluations:",
+      "evaluationsTotal:",
       evaluationsResult.rows.length,
+      "evaluationsToCompute:",
+      evaluationsToCompute.length,
       "normalizationScope:",
       normalizationScope
     );
@@ -262,7 +284,7 @@ export async function POST(
     );
     const coachNameById = new Map<string, string>();
     if (coachIds.length > 0) {
-      const coachesResult = await pool.query(
+      const coachesResult = await client.query(
         "SELECT id, name FROM users WHERE id = ANY($1::uuid[])",
         [coachIds]
       );
@@ -271,7 +293,6 @@ export async function POST(
       }
     }
 
-    const client = await pool.connect();
     let playerEvaluationsUpserted = 0;
 
     type MinMax = { min: number | null; max: number | null };
@@ -563,8 +584,8 @@ export async function POST(
     try {
       await client.query("BEGIN");
 
-      // TESTING-ONLY: compute Shot Power + Serve Distance + Figure 8 + Passing Gates + 1v1 + Juggling + Skill Moves for each evaluation and console.log results
-      for (const ev of evaluationsResult.rows) {
+      // Compute metrics for each evaluation (and persist to DB)
+      for (const ev of evaluationsToCompute) {
         const evaluationId: string = ev.id;
         const evaluationName: string = ev.name ?? "Evaluation";
         const evaluationCreatedAt: Date | null = ev.created_at
@@ -1367,7 +1388,1213 @@ export async function POST(
           computedByPlayer
         );
 
-        // Persist to database (PlayerEvaluations + TestScores + OverallScores + PlayerDNA)
+        // Calculate Power Strength (PS) for each player
+        console.log("[compute-all][PS] evaluation:", evaluationId);
+        console.log(
+          "[compute-all][PS] Starting Power Strength calculations..."
+        );
+
+        const psResults: Record<string, any> = {};
+
+        for (const [playerId, row] of Object.entries(computedByPlayer)) {
+          const playerName =
+            playersById.get(playerId)?.name ?? "Unknown Player";
+          const norm = (row as any).norm;
+
+          console.log(`[compute-all][PS] Player: ${playerName} (${playerId})`);
+
+          // PS definition (matches your hand math):
+          // numerator   = Σ(featureValue * testWeight)
+          // denominator = Σ(testWeight counted once per feature) = Σ(featureCount * testWeight)
+
+          // Test 1: Shot Power (weight = 3)
+          const test1Values = [
+            norm.shot_power_strong_avg_norm,
+            norm.shot_power_weak_avg_norm,
+            norm.shot_power_strong_max_norm,
+            norm.shot_power_weak_max_norm,
+          ].filter((v): v is number => v !== null && typeof v === "number");
+          const test1Sum = test1Values.reduce((sum, v) => sum + v, 0);
+          const test1Weight = 3;
+          const test1WeightedContribution = test1Sum * test1Weight;
+          const test1DenominatorWeight = test1Values.length * test1Weight;
+          console.log(
+            `[compute-all][PS] Test 1 (Shot Power): values=${JSON.stringify(
+              test1Values
+            )}, sum=${test1Sum.toFixed(
+              6
+            )}, weight=${test1Weight}, contribution=${test1WeightedContribution.toFixed(
+              6
+            )}, denomWeight=${test1DenominatorWeight}`
+          );
+
+          // Test 2: Serve Distance (weight = 3)
+          const test2Values = [
+            norm.serve_distance_strong_avg_norm,
+            norm.serve_distance_weak_avg_norm,
+            norm.serve_distance_strong_max_norm,
+            norm.serve_distance_weak_max_norm,
+          ].filter((v): v is number => v !== null && typeof v === "number");
+          const test2Sum = test2Values.reduce((sum, v) => sum + v, 0);
+          const test2Weight = 3;
+          const test2WeightedContribution = test2Sum * test2Weight;
+          const test2DenominatorWeight = test2Values.length * test2Weight;
+          console.log(
+            `[compute-all][PS] Test 2 (Serve Distance): values=${JSON.stringify(
+              test2Values
+            )}, sum=${test2Sum.toFixed(
+              6
+            )}, weight=${test2Weight}, contribution=${test2WeightedContribution.toFixed(
+              6
+            )}, denomWeight=${test2DenominatorWeight}`
+          );
+
+          // Test 5: 1v1 Competitive Score (weight = 1)
+          const test5Values = [
+            norm.one_v_one_avg_score_norm,
+            norm.one_v_one_rounds_played_norm,
+          ].filter((v): v is number => v !== null && typeof v === "number");
+          const test5Sum = test5Values.reduce((sum, v) => sum + v, 0);
+          const test5Weight = 1;
+          const test5WeightedContribution = test5Sum * test5Weight;
+          const test5DenominatorWeight = test5Values.length * test5Weight;
+          console.log(
+            `[compute-all][PS] Test 5 (1v1 Competitive Score): values=${JSON.stringify(
+              test5Values
+            )}, sum=${test5Sum.toFixed(
+              6
+            )}, weight=${test5Weight}, contribution=${test5WeightedContribution.toFixed(
+              6
+            )}, denomWeight=${test5DenominatorWeight}`
+          );
+
+          // Test 8: 5-10-5 Pro Agility (weight = 2)
+          const test8Values = [
+            norm.agility_5_10_5_best_time_norm,
+            norm.agility_5_10_5_avg_time_norm,
+          ].filter((v): v is number => v !== null && typeof v === "number");
+          const test8Sum = test8Values.reduce((sum, v) => sum + v, 0);
+          const test8Weight = 2;
+          const test8WeightedContribution = test8Sum * test8Weight;
+          const test8DenominatorWeight = test8Values.length * test8Weight;
+          console.log(
+            `[compute-all][PS] Test 8 (5-10-5 Pro Agility): values=${JSON.stringify(
+              test8Values
+            )}, sum=${test8Sum.toFixed(
+              6
+            )}, weight=${test8Weight}, contribution=${test8WeightedContribution.toFixed(
+              6
+            )}, denomWeight=${test8DenominatorWeight}`
+          );
+
+          // Test 9: Reaction Test 5m Start (weight = 1)
+          const test9Values = [
+            norm.reaction_5m_reaction_time_avg_norm,
+            norm.reaction_5m_total_time_avg_norm,
+          ].filter((v): v is number => v !== null && typeof v === "number");
+          const test9Sum = test9Values.reduce((sum, v) => sum + v, 0);
+          const test9Weight = 1;
+          const test9WeightedContribution = test9Sum * test9Weight;
+          const test9DenominatorWeight = test9Values.length * test9Weight;
+          console.log(
+            `[compute-all][PS] Test 9 (Reaction Test 5m Start): values=${JSON.stringify(
+              test9Values
+            )}, sum=${test9Sum.toFixed(
+              6
+            )}, weight=${test9Weight}, contribution=${test9WeightedContribution.toFixed(
+              6
+            )}, denomWeight=${test9DenominatorWeight}`
+          );
+
+          // Test 10: Single Leg Hop L/R (weight = 2)
+          const test10Values = [
+            norm.single_leg_hop_left_norm,
+            norm.single_leg_hop_right_norm,
+            norm.single_leg_hop_asymmetry_pct_norm,
+          ].filter((v): v is number => v !== null && typeof v === "number");
+          const test10Sum = test10Values.reduce((sum, v) => sum + v, 0);
+          const test10Weight = 2;
+          const test10WeightedContribution = test10Sum * test10Weight;
+          const test10DenominatorWeight = test10Values.length * test10Weight;
+          console.log(
+            `[compute-all][PS] Test 10 (Single Leg Hop L/R): values=${JSON.stringify(
+              test10Values
+            )}, sum=${test10Sum.toFixed(
+              6
+            )}, weight=${test10Weight}, contribution=${test10WeightedContribution.toFixed(
+              6
+            )}, denomWeight=${test10DenominatorWeight}`
+          );
+
+          // Test 11: Double Leg Jump Endure (weight = 3)
+          const test11Values = [
+            norm.double_leg_jumps_total_reps_norm,
+            norm.double_leg_jumps_first10_norm,
+            norm.double_leg_jumps_last10_norm,
+            norm.double_leg_jumps_dropoff_pct_norm,
+          ].filter((v): v is number => v !== null && typeof v === "number");
+          const test11Sum = test11Values.reduce((sum, v) => sum + v, 0);
+          const test11Weight = 3;
+          const test11WeightedContribution = test11Sum * test11Weight;
+          const test11DenominatorWeight = test11Values.length * test11Weight;
+          console.log(
+            `[compute-all][PS] Test 11 (Double Leg Jump Endure): values=${JSON.stringify(
+              test11Values
+            )}, sum=${test11Sum.toFixed(
+              6
+            )}, weight=${test11Weight}, contribution=${test11WeightedContribution.toFixed(
+              6
+            )}, denomWeight=${test11DenominatorWeight}`
+          );
+
+          // Test 13: Core Endurance Plank (weight = 2)
+          const test13Values = [
+            norm.core_plank_hold_sec_norm,
+            norm.core_plank_form_flag_norm,
+          ].filter((v): v is number => v !== null && typeof v === "number");
+          const test13Sum = test13Values.reduce((sum, v) => sum + v, 0);
+          const test13Weight = 2;
+          const test13WeightedContribution = test13Sum * test13Weight;
+          const test13DenominatorWeight = test13Values.length * test13Weight;
+          console.log(
+            `[compute-all][PS] Test 13 (Core Endurance Plank): values=${JSON.stringify(
+              test13Values
+            )}, sum=${test13Sum.toFixed(
+              6
+            )}, weight=${test13Weight}, contribution=${test13WeightedContribution.toFixed(
+              6
+            )}, denomWeight=${test13DenominatorWeight}`
+          );
+
+          // Calculate total weighted contributions and total weights (feature-weighted denominator)
+          const totalWeightedContributions =
+            test1WeightedContribution +
+            test2WeightedContribution +
+            test5WeightedContribution +
+            test8WeightedContribution +
+            test9WeightedContribution +
+            test10WeightedContribution +
+            test11WeightedContribution +
+            test13WeightedContribution;
+
+          const totalWeights =
+            test1DenominatorWeight +
+            test2DenominatorWeight +
+            test5DenominatorWeight +
+            test8DenominatorWeight +
+            test9DenominatorWeight +
+            test10DenominatorWeight +
+            test11DenominatorWeight +
+            test13DenominatorWeight;
+
+          // Calculate PS score (0-1)
+          const psScore =
+            totalWeights > 0 ? totalWeightedContributions / totalWeights : null;
+
+          console.log(
+            `[compute-all][PS] ${playerName}: totalWeightedContributions=${totalWeightedContributions.toFixed(
+              6
+            )}, totalWeights=${totalWeights}, PS=${
+              psScore !== null ? psScore.toFixed(4) : "null"
+            }`
+          );
+
+          psResults[playerId] = {
+            playerName,
+            psScore,
+            testContributions: {
+              test1: {
+                sum: test1Sum,
+                featureCount: test1Values.length,
+                weight: test1Weight,
+                contribution: test1WeightedContribution,
+                denomWeight: test1DenominatorWeight,
+              },
+              test2: {
+                sum: test2Sum,
+                featureCount: test2Values.length,
+                weight: test2Weight,
+                contribution: test2WeightedContribution,
+                denomWeight: test2DenominatorWeight,
+              },
+              test5: {
+                sum: test5Sum,
+                featureCount: test5Values.length,
+                weight: test5Weight,
+                contribution: test5WeightedContribution,
+                denomWeight: test5DenominatorWeight,
+              },
+              test8: {
+                sum: test8Sum,
+                featureCount: test8Values.length,
+                weight: test8Weight,
+                contribution: test8WeightedContribution,
+                denomWeight: test8DenominatorWeight,
+              },
+              test9: {
+                sum: test9Sum,
+                featureCount: test9Values.length,
+                weight: test9Weight,
+                contribution: test9WeightedContribution,
+                denomWeight: test9DenominatorWeight,
+              },
+              test10: {
+                sum: test10Sum,
+                featureCount: test10Values.length,
+                weight: test10Weight,
+                contribution: test10WeightedContribution,
+                denomWeight: test10DenominatorWeight,
+              },
+              test11: {
+                sum: test11Sum,
+                featureCount: test11Values.length,
+                weight: test11Weight,
+                contribution: test11WeightedContribution,
+                denomWeight: test11DenominatorWeight,
+              },
+              test13: {
+                sum: test13Sum,
+                featureCount: test13Values.length,
+                weight: test13Weight,
+                contribution: test13WeightedContribution,
+                denomWeight: test13DenominatorWeight,
+              },
+            },
+            totalWeightedContributions,
+            totalWeights,
+          };
+        }
+
+        console.log("[compute-all][PS] All PS calculations complete:");
+        console.log("[compute-all][PS] Results:", psResults);
+
+        // Calculate Technique / Control (TC) for each player (2nd index of 4D cluster vector)
+        console.log("[compute-all][TC] evaluation:", evaluationId);
+        console.log(
+          "[compute-all][TC] Starting Technique / Control calculations..."
+        );
+
+        const tcResults: Record<string, any> = {};
+
+        for (const [playerId, row] of Object.entries(computedByPlayer)) {
+          const playerName =
+            playersById.get(playerId)?.name ?? "Unknown Player";
+          const norm = (row as any).norm;
+
+          console.log(`[compute-all][TC] Player: ${playerName} (${playerId})`);
+
+          // TC definition (same style as PS):
+          // numerator   = Σ(featureValue * testWeight)
+          // denominator = Σ(featureCount * testWeight)
+
+          // Test 1: Shot Power (weight = 1)
+          const tcTest1Values = [
+            norm.shot_power_strong_avg_norm,
+            norm.shot_power_weak_avg_norm,
+            norm.shot_power_strong_max_norm,
+            norm.shot_power_weak_max_norm,
+          ].filter((v): v is number => v !== null && typeof v === "number");
+          const tcTest1Sum = tcTest1Values.reduce((sum, v) => sum + v, 0);
+          const tcTest1Weight = 1;
+          const tcTest1Contribution = tcTest1Sum * tcTest1Weight;
+          const tcTest1DenomWeight = tcTest1Values.length * tcTest1Weight;
+          console.log(
+            `[compute-all][TC] Test 1 (Shot Power): values=${JSON.stringify(
+              tcTest1Values
+            )}, sum=${tcTest1Sum.toFixed(
+              6
+            )}, weight=${tcTest1Weight}, contribution=${tcTest1Contribution.toFixed(
+              6
+            )}, denomWeight=${tcTest1DenomWeight}`
+          );
+
+          // Test 2: Serve Distance (weight = 1)
+          const tcTest2Values = [
+            norm.serve_distance_strong_avg_norm,
+            norm.serve_distance_weak_avg_norm,
+            norm.serve_distance_strong_max_norm,
+            norm.serve_distance_weak_max_norm,
+          ].filter((v): v is number => v !== null && typeof v === "number");
+          const tcTest2Sum = tcTest2Values.reduce((sum, v) => sum + v, 0);
+          const tcTest2Weight = 1;
+          const tcTest2Contribution = tcTest2Sum * tcTest2Weight;
+          const tcTest2DenomWeight = tcTest2Values.length * tcTest2Weight;
+          console.log(
+            `[compute-all][TC] Test 2 (Serve Distance): values=${JSON.stringify(
+              tcTest2Values
+            )}, sum=${tcTest2Sum.toFixed(
+              6
+            )}, weight=${tcTest2Weight}, contribution=${tcTest2Contribution.toFixed(
+              6
+            )}, denomWeight=${tcTest2DenomWeight}`
+          );
+
+          // Test 3: Figure 8 Dribble (weight = 3)
+          const tcTest3Values = [
+            norm.figure8_loops_strong_norm,
+            norm.figure8_loops_weak_norm,
+            norm.figure8_loops_both_norm,
+          ].filter((v): v is number => v !== null && typeof v === "number");
+          const tcTest3Sum = tcTest3Values.reduce((sum, v) => sum + v, 0);
+          const tcTest3Weight = 3;
+          const tcTest3Contribution = tcTest3Sum * tcTest3Weight;
+          const tcTest3DenomWeight = tcTest3Values.length * tcTest3Weight;
+          console.log(
+            `[compute-all][TC] Test 3 (Figure 8 Dribble): values=${JSON.stringify(
+              tcTest3Values
+            )}, sum=${tcTest3Sum.toFixed(
+              6
+            )}, weight=${tcTest3Weight}, contribution=${tcTest3Contribution.toFixed(
+              6
+            )}, denomWeight=${tcTest3DenomWeight}`
+          );
+
+          // Test 4: Passing Gates (weight = 3)
+          const tcTest4Values = [
+            norm.passing_gates_strong_hits_norm,
+            norm.passing_gates_weak_hits_norm,
+            norm.passing_gates_total_hits_norm,
+          ].filter((v): v is number => v !== null && typeof v === "number");
+          const tcTest4Sum = tcTest4Values.reduce((sum, v) => sum + v, 0);
+          const tcTest4Weight = 3;
+          const tcTest4Contribution = tcTest4Sum * tcTest4Weight;
+          const tcTest4DenomWeight = tcTest4Values.length * tcTest4Weight;
+          console.log(
+            `[compute-all][TC] Test 4 (Passing Gates): values=${JSON.stringify(
+              tcTest4Values
+            )}, sum=${tcTest4Sum.toFixed(
+              6
+            )}, weight=${tcTest4Weight}, contribution=${tcTest4Contribution.toFixed(
+              6
+            )}, denomWeight=${tcTest4DenomWeight}`
+          );
+
+          // Test 5: 1v1 Competitive Score (weight = 2)
+          const tcTest5Values = [
+            norm.one_v_one_avg_score_norm,
+            norm.one_v_one_rounds_played_norm,
+          ].filter((v): v is number => v !== null && typeof v === "number");
+          const tcTest5Sum = tcTest5Values.reduce((sum, v) => sum + v, 0);
+          const tcTest5Weight = 2;
+          const tcTest5Contribution = tcTest5Sum * tcTest5Weight;
+          const tcTest5DenomWeight = tcTest5Values.length * tcTest5Weight;
+          console.log(
+            `[compute-all][TC] Test 5 (1v1 Competitive Score): values=${JSON.stringify(
+              tcTest5Values
+            )}, sum=${tcTest5Sum.toFixed(
+              6
+            )}, weight=${tcTest5Weight}, contribution=${tcTest5Contribution.toFixed(
+              6
+            )}, denomWeight=${tcTest5DenomWeight}`
+          );
+
+          // Test 6: Juggling Control (weight = 3)
+          const tcTest6Values = [
+            norm.juggle_best_norm,
+            norm.juggle_best2_sum_norm,
+            norm.juggle_avg_all_norm,
+          ].filter((v): v is number => v !== null && typeof v === "number");
+          const tcTest6Sum = tcTest6Values.reduce((sum, v) => sum + v, 0);
+          const tcTest6Weight = 3;
+          const tcTest6Contribution = tcTest6Sum * tcTest6Weight;
+          const tcTest6DenomWeight = tcTest6Values.length * tcTest6Weight;
+          console.log(
+            `[compute-all][TC] Test 6 (Juggling Control): values=${JSON.stringify(
+              tcTest6Values
+            )}, sum=${tcTest6Sum.toFixed(
+              6
+            )}, weight=${tcTest6Weight}, contribution=${tcTest6Contribution.toFixed(
+              6
+            )}, denomWeight=${tcTest6DenomWeight}`
+          );
+
+          // Test 7: Skill Moves Rating (weight = 3)
+          const tcTest7Values = [
+            norm.skill_moves_avg_rating_norm,
+            norm.skill_moves_count_norm,
+          ].filter((v): v is number => v !== null && typeof v === "number");
+          const tcTest7Sum = tcTest7Values.reduce((sum, v) => sum + v, 0);
+          const tcTest7Weight = 3;
+          const tcTest7Contribution = tcTest7Sum * tcTest7Weight;
+          const tcTest7DenomWeight = tcTest7Values.length * tcTest7Weight;
+          console.log(
+            `[compute-all][TC] Test 7 (Skill Moves Rating): values=${JSON.stringify(
+              tcTest7Values
+            )}, sum=${tcTest7Sum.toFixed(
+              6
+            )}, weight=${tcTest7Weight}, contribution=${tcTest7Contribution.toFixed(
+              6
+            )}, denomWeight=${tcTest7DenomWeight}`
+          );
+
+          // Test 12: Ankle Dorsiflexion (weight = 1)
+          const tcTest12Values = [
+            norm.ankle_dorsiflex_left_cm_norm,
+            norm.ankle_dorsiflex_right_cm_norm,
+            norm.ankle_dorsiflex_avg_cm_norm,
+            norm.ankle_dorsiflex_asymmetry_pct_norm,
+          ].filter((v): v is number => v !== null && typeof v === "number");
+          const tcTest12Sum = tcTest12Values.reduce((sum, v) => sum + v, 0);
+          const tcTest12Weight = 1;
+          const tcTest12Contribution = tcTest12Sum * tcTest12Weight;
+          const tcTest12DenomWeight = tcTest12Values.length * tcTest12Weight;
+          console.log(
+            `[compute-all][TC] Test 12 (Ankle Dorsiflexion): values=${JSON.stringify(
+              tcTest12Values
+            )}, sum=${tcTest12Sum.toFixed(
+              6
+            )}, weight=${tcTest12Weight}, contribution=${tcTest12Contribution.toFixed(
+              6
+            )}, denomWeight=${tcTest12DenomWeight}`
+          );
+
+          const tcTotalWeightedContributions =
+            tcTest1Contribution +
+            tcTest2Contribution +
+            tcTest3Contribution +
+            tcTest4Contribution +
+            tcTest5Contribution +
+            tcTest6Contribution +
+            tcTest7Contribution +
+            tcTest12Contribution;
+
+          const tcTotalWeights =
+            tcTest1DenomWeight +
+            tcTest2DenomWeight +
+            tcTest3DenomWeight +
+            tcTest4DenomWeight +
+            tcTest5DenomWeight +
+            tcTest6DenomWeight +
+            tcTest7DenomWeight +
+            tcTest12DenomWeight;
+
+          const tcScore =
+            tcTotalWeights > 0
+              ? tcTotalWeightedContributions / tcTotalWeights
+              : null;
+
+          console.log(
+            `[compute-all][TC] ${playerName}: totalWeightedContributions=${tcTotalWeightedContributions.toFixed(
+              6
+            )}, totalWeights=${tcTotalWeights}, TC=${
+              tcScore !== null ? tcScore.toFixed(4) : "null"
+            }`
+          );
+
+          tcResults[playerId] = {
+            playerName,
+            tcScore,
+            testContributions: {
+              test1: {
+                sum: tcTest1Sum,
+                featureCount: tcTest1Values.length,
+                weight: tcTest1Weight,
+                contribution: tcTest1Contribution,
+                denomWeight: tcTest1DenomWeight,
+              },
+              test2: {
+                sum: tcTest2Sum,
+                featureCount: tcTest2Values.length,
+                weight: tcTest2Weight,
+                contribution: tcTest2Contribution,
+                denomWeight: tcTest2DenomWeight,
+              },
+              test3: {
+                sum: tcTest3Sum,
+                featureCount: tcTest3Values.length,
+                weight: tcTest3Weight,
+                contribution: tcTest3Contribution,
+                denomWeight: tcTest3DenomWeight,
+              },
+              test4: {
+                sum: tcTest4Sum,
+                featureCount: tcTest4Values.length,
+                weight: tcTest4Weight,
+                contribution: tcTest4Contribution,
+                denomWeight: tcTest4DenomWeight,
+              },
+              test5: {
+                sum: tcTest5Sum,
+                featureCount: tcTest5Values.length,
+                weight: tcTest5Weight,
+                contribution: tcTest5Contribution,
+                denomWeight: tcTest5DenomWeight,
+              },
+              test6: {
+                sum: tcTest6Sum,
+                featureCount: tcTest6Values.length,
+                weight: tcTest6Weight,
+                contribution: tcTest6Contribution,
+                denomWeight: tcTest6DenomWeight,
+              },
+              test7: {
+                sum: tcTest7Sum,
+                featureCount: tcTest7Values.length,
+                weight: tcTest7Weight,
+                contribution: tcTest7Contribution,
+                denomWeight: tcTest7DenomWeight,
+              },
+              test12: {
+                sum: tcTest12Sum,
+                featureCount: tcTest12Values.length,
+                weight: tcTest12Weight,
+                contribution: tcTest12Contribution,
+                denomWeight: tcTest12DenomWeight,
+              },
+            },
+            totalWeightedContributions: tcTotalWeightedContributions,
+            totalWeights: tcTotalWeights,
+          };
+        }
+
+        console.log("[compute-all][TC] All TC calculations complete:");
+        console.log("[compute-all][TC] Results:", tcResults);
+
+        // Calculate Mobility / Stability (MS) for each player (3rd index of 4D cluster vector)
+        console.log("[compute-all][MS] evaluation:", evaluationId);
+        console.log(
+          "[compute-all][MS] Starting Mobility / Stability calculations..."
+        );
+
+        const msResults: Record<string, any> = {};
+
+        for (const [playerId, row] of Object.entries(computedByPlayer)) {
+          const playerName =
+            playersById.get(playerId)?.name ?? "Unknown Player";
+          const norm = (row as any).norm;
+
+          console.log(`[compute-all][MS] Player: ${playerName} (${playerId})`);
+
+          // MS definition (same style as PS/TC):
+          // numerator   = Σ(featureValue * testWeight)
+          // denominator = Σ(featureCount * testWeight)
+
+          // Test 2: Serve Distance (weight = 2)
+          const msTest2Values = [
+            norm.serve_distance_strong_avg_norm,
+            norm.serve_distance_weak_avg_norm,
+            norm.serve_distance_strong_max_norm,
+            norm.serve_distance_weak_max_norm,
+          ].filter((v): v is number => v !== null && typeof v === "number");
+          const msTest2Sum = msTest2Values.reduce((sum, v) => sum + v, 0);
+          const msTest2Weight = 2;
+          const msTest2Contribution = msTest2Sum * msTest2Weight;
+          const msTest2DenomWeight = msTest2Values.length * msTest2Weight;
+          console.log(
+            `[compute-all][MS] Test 2 (Serve Distance): values=${JSON.stringify(
+              msTest2Values
+            )}, sum=${msTest2Sum.toFixed(
+              6
+            )}, weight=${msTest2Weight}, contribution=${msTest2Contribution.toFixed(
+              6
+            )}, denomWeight=${msTest2DenomWeight}`
+          );
+
+          // Test 3: Figure 8 Dribble (weight = 2)
+          const msTest3Values = [
+            norm.figure8_loops_strong_norm,
+            norm.figure8_loops_weak_norm,
+            norm.figure8_loops_both_norm,
+          ].filter((v): v is number => v !== null && typeof v === "number");
+          const msTest3Sum = msTest3Values.reduce((sum, v) => sum + v, 0);
+          const msTest3Weight = 2;
+          const msTest3Contribution = msTest3Sum * msTest3Weight;
+          const msTest3DenomWeight = msTest3Values.length * msTest3Weight;
+          console.log(
+            `[compute-all][MS] Test 3 (Figure 8 Dribble): values=${JSON.stringify(
+              msTest3Values
+            )}, sum=${msTest3Sum.toFixed(
+              6
+            )}, weight=${msTest3Weight}, contribution=${msTest3Contribution.toFixed(
+              6
+            )}, denomWeight=${msTest3DenomWeight}`
+          );
+
+          // Test 4: Passing Gates (weight = 1)
+          const msTest4Values = [
+            norm.passing_gates_strong_hits_norm,
+            norm.passing_gates_weak_hits_norm,
+            norm.passing_gates_total_hits_norm,
+          ].filter((v): v is number => v !== null && typeof v === "number");
+          const msTest4Sum = msTest4Values.reduce((sum, v) => sum + v, 0);
+          const msTest4Weight = 1;
+          const msTest4Contribution = msTest4Sum * msTest4Weight;
+          const msTest4DenomWeight = msTest4Values.length * msTest4Weight;
+          console.log(
+            `[compute-all][MS] Test 4 (Passing Gates): values=${JSON.stringify(
+              msTest4Values
+            )}, sum=${msTest4Sum.toFixed(
+              6
+            )}, weight=${msTest4Weight}, contribution=${msTest4Contribution.toFixed(
+              6
+            )}, denomWeight=${msTest4DenomWeight}`
+          );
+
+          // Test 5: 1v1 Competitive Score (weight = 2)
+          const msTest5Values = [
+            norm.one_v_one_avg_score_norm,
+            norm.one_v_one_rounds_played_norm,
+          ].filter((v): v is number => v !== null && typeof v === "number");
+          const msTest5Sum = msTest5Values.reduce((sum, v) => sum + v, 0);
+          const msTest5Weight = 2;
+          const msTest5Contribution = msTest5Sum * msTest5Weight;
+          const msTest5DenomWeight = msTest5Values.length * msTest5Weight;
+          console.log(
+            `[compute-all][MS] Test 5 (1v1 Competitive Score): values=${JSON.stringify(
+              msTest5Values
+            )}, sum=${msTest5Sum.toFixed(
+              6
+            )}, weight=${msTest5Weight}, contribution=${msTest5Contribution.toFixed(
+              6
+            )}, denomWeight=${msTest5DenomWeight}`
+          );
+
+          // Test 6: Juggling Control (weight = 1)
+          const msTest6Values = [
+            norm.juggle_best_norm,
+            norm.juggle_best2_sum_norm,
+            norm.juggle_avg_all_norm,
+          ].filter((v): v is number => v !== null && typeof v === "number");
+          const msTest6Sum = msTest6Values.reduce((sum, v) => sum + v, 0);
+          const msTest6Weight = 1;
+          const msTest6Contribution = msTest6Sum * msTest6Weight;
+          const msTest6DenomWeight = msTest6Values.length * msTest6Weight;
+          console.log(
+            `[compute-all][MS] Test 6 (Juggling Control): values=${JSON.stringify(
+              msTest6Values
+            )}, sum=${msTest6Sum.toFixed(
+              6
+            )}, weight=${msTest6Weight}, contribution=${msTest6Contribution.toFixed(
+              6
+            )}, denomWeight=${msTest6DenomWeight}`
+          );
+
+          // Test 7: Skill Moves Rating (weight = 1)
+          const msTest7Values = [
+            norm.skill_moves_avg_rating_norm,
+            norm.skill_moves_count_norm,
+          ].filter((v): v is number => v !== null && typeof v === "number");
+          const msTest7Sum = msTest7Values.reduce((sum, v) => sum + v, 0);
+          const msTest7Weight = 1;
+          const msTest7Contribution = msTest7Sum * msTest7Weight;
+          const msTest7DenomWeight = msTest7Values.length * msTest7Weight;
+          console.log(
+            `[compute-all][MS] Test 7 (Skill Moves Rating): values=${JSON.stringify(
+              msTest7Values
+            )}, sum=${msTest7Sum.toFixed(
+              6
+            )}, weight=${msTest7Weight}, contribution=${msTest7Contribution.toFixed(
+              6
+            )}, denomWeight=${msTest7DenomWeight}`
+          );
+
+          // Test 8: 5-10-5 Pro Agility (weight = 3)
+          const msTest8Values = [
+            norm.agility_5_10_5_best_time_norm,
+            norm.agility_5_10_5_avg_time_norm,
+          ].filter((v): v is number => v !== null && typeof v === "number");
+          const msTest8Sum = msTest8Values.reduce((sum, v) => sum + v, 0);
+          const msTest8Weight = 3;
+          const msTest8Contribution = msTest8Sum * msTest8Weight;
+          const msTest8DenomWeight = msTest8Values.length * msTest8Weight;
+          console.log(
+            `[compute-all][MS] Test 8 (5-10-5 Pro Agility): values=${JSON.stringify(
+              msTest8Values
+            )}, sum=${msTest8Sum.toFixed(
+              6
+            )}, weight=${msTest8Weight}, contribution=${msTest8Contribution.toFixed(
+              6
+            )}, denomWeight=${msTest8DenomWeight}`
+          );
+
+          // Test 9: Reaction Test 5m Start (weight = 2)
+          const msTest9Values = [
+            norm.reaction_5m_reaction_time_avg_norm,
+            norm.reaction_5m_total_time_avg_norm,
+          ].filter((v): v is number => v !== null && typeof v === "number");
+          const msTest9Sum = msTest9Values.reduce((sum, v) => sum + v, 0);
+          const msTest9Weight = 2;
+          const msTest9Contribution = msTest9Sum * msTest9Weight;
+          const msTest9DenomWeight = msTest9Values.length * msTest9Weight;
+          console.log(
+            `[compute-all][MS] Test 9 (Reaction Test 5m Start): values=${JSON.stringify(
+              msTest9Values
+            )}, sum=${msTest9Sum.toFixed(
+              6
+            )}, weight=${msTest9Weight}, contribution=${msTest9Contribution.toFixed(
+              6
+            )}, denomWeight=${msTest9DenomWeight}`
+          );
+
+          // Test 10: Single Leg Hop L/R (weight = 3)
+          const msTest10Values = [
+            norm.single_leg_hop_left_norm,
+            norm.single_leg_hop_right_norm,
+            norm.single_leg_hop_asymmetry_pct_norm,
+          ].filter((v): v is number => v !== null && typeof v === "number");
+          const msTest10Sum = msTest10Values.reduce((sum, v) => sum + v, 0);
+          const msTest10Weight = 3;
+          const msTest10Contribution = msTest10Sum * msTest10Weight;
+          const msTest10DenomWeight = msTest10Values.length * msTest10Weight;
+          console.log(
+            `[compute-all][MS] Test 10 (Single Leg Hop L/R): values=${JSON.stringify(
+              msTest10Values
+            )}, sum=${msTest10Sum.toFixed(
+              6
+            )}, weight=${msTest10Weight}, contribution=${msTest10Contribution.toFixed(
+              6
+            )}, denomWeight=${msTest10DenomWeight}`
+          );
+
+          // Test 11: Double Leg Jump Endure (weight = 2)
+          const msTest11Values = [
+            norm.double_leg_jumps_total_reps_norm,
+            norm.double_leg_jumps_first10_norm,
+            norm.double_leg_jumps_last10_norm,
+            norm.double_leg_jumps_dropoff_pct_norm,
+          ].filter((v): v is number => v !== null && typeof v === "number");
+          const msTest11Sum = msTest11Values.reduce((sum, v) => sum + v, 0);
+          const msTest11Weight = 2;
+          const msTest11Contribution = msTest11Sum * msTest11Weight;
+          const msTest11DenomWeight = msTest11Values.length * msTest11Weight;
+          console.log(
+            `[compute-all][MS] Test 11 (Double Leg Jump Endure): values=${JSON.stringify(
+              msTest11Values
+            )}, sum=${msTest11Sum.toFixed(
+              6
+            )}, weight=${msTest11Weight}, contribution=${msTest11Contribution.toFixed(
+              6
+            )}, denomWeight=${msTest11DenomWeight}`
+          );
+
+          // Test 12: Ankle Dorsiflexion (weight = 3)
+          const msTest12Values = [
+            norm.ankle_dorsiflex_left_cm_norm,
+            norm.ankle_dorsiflex_right_cm_norm,
+            norm.ankle_dorsiflex_avg_cm_norm,
+            norm.ankle_dorsiflex_asymmetry_pct_norm,
+          ].filter((v): v is number => v !== null && typeof v === "number");
+          const msTest12Sum = msTest12Values.reduce((sum, v) => sum + v, 0);
+          const msTest12Weight = 3;
+          const msTest12Contribution = msTest12Sum * msTest12Weight;
+          const msTest12DenomWeight = msTest12Values.length * msTest12Weight;
+          console.log(
+            `[compute-all][MS] Test 12 (Ankle Dorsiflexion): values=${JSON.stringify(
+              msTest12Values
+            )}, sum=${msTest12Sum.toFixed(
+              6
+            )}, weight=${msTest12Weight}, contribution=${msTest12Contribution.toFixed(
+              6
+            )}, denomWeight=${msTest12DenomWeight}`
+          );
+
+          // Test 13: Core Endurance Plank (weight = 3)
+          const msTest13Values = [
+            norm.core_plank_hold_sec_norm,
+            norm.core_plank_form_flag_norm,
+          ].filter((v): v is number => v !== null && typeof v === "number");
+          const msTest13Sum = msTest13Values.reduce((sum, v) => sum + v, 0);
+          const msTest13Weight = 3;
+          const msTest13Contribution = msTest13Sum * msTest13Weight;
+          const msTest13DenomWeight = msTest13Values.length * msTest13Weight;
+          console.log(
+            `[compute-all][MS] Test 13 (Core Endurance Plank): values=${JSON.stringify(
+              msTest13Values
+            )}, sum=${msTest13Sum.toFixed(
+              6
+            )}, weight=${msTest13Weight}, contribution=${msTest13Contribution.toFixed(
+              6
+            )}, denomWeight=${msTest13DenomWeight}`
+          );
+
+          const msTotalWeightedContributions =
+            msTest2Contribution +
+            msTest3Contribution +
+            msTest4Contribution +
+            msTest5Contribution +
+            msTest6Contribution +
+            msTest7Contribution +
+            msTest8Contribution +
+            msTest9Contribution +
+            msTest10Contribution +
+            msTest11Contribution +
+            msTest12Contribution +
+            msTest13Contribution;
+
+          const msTotalWeights =
+            msTest2DenomWeight +
+            msTest3DenomWeight +
+            msTest4DenomWeight +
+            msTest5DenomWeight +
+            msTest6DenomWeight +
+            msTest7DenomWeight +
+            msTest8DenomWeight +
+            msTest9DenomWeight +
+            msTest10DenomWeight +
+            msTest11DenomWeight +
+            msTest12DenomWeight +
+            msTest13DenomWeight;
+
+          const msScore =
+            msTotalWeights > 0
+              ? msTotalWeightedContributions / msTotalWeights
+              : null;
+
+          console.log(
+            `[compute-all][MS] ${playerName}: totalWeightedContributions=${msTotalWeightedContributions.toFixed(
+              6
+            )}, totalWeights=${msTotalWeights}, MS=${
+              msScore !== null ? msScore.toFixed(4) : "null"
+            }`
+          );
+
+          msResults[playerId] = {
+            playerName,
+            msScore,
+            testContributions: {
+              test2: {
+                sum: msTest2Sum,
+                featureCount: msTest2Values.length,
+                weight: msTest2Weight,
+                contribution: msTest2Contribution,
+                denomWeight: msTest2DenomWeight,
+              },
+              test3: {
+                sum: msTest3Sum,
+                featureCount: msTest3Values.length,
+                weight: msTest3Weight,
+                contribution: msTest3Contribution,
+                denomWeight: msTest3DenomWeight,
+              },
+              test4: {
+                sum: msTest4Sum,
+                featureCount: msTest4Values.length,
+                weight: msTest4Weight,
+                contribution: msTest4Contribution,
+                denomWeight: msTest4DenomWeight,
+              },
+              test5: {
+                sum: msTest5Sum,
+                featureCount: msTest5Values.length,
+                weight: msTest5Weight,
+                contribution: msTest5Contribution,
+                denomWeight: msTest5DenomWeight,
+              },
+              test6: {
+                sum: msTest6Sum,
+                featureCount: msTest6Values.length,
+                weight: msTest6Weight,
+                contribution: msTest6Contribution,
+                denomWeight: msTest6DenomWeight,
+              },
+              test7: {
+                sum: msTest7Sum,
+                featureCount: msTest7Values.length,
+                weight: msTest7Weight,
+                contribution: msTest7Contribution,
+                denomWeight: msTest7DenomWeight,
+              },
+              test8: {
+                sum: msTest8Sum,
+                featureCount: msTest8Values.length,
+                weight: msTest8Weight,
+                contribution: msTest8Contribution,
+                denomWeight: msTest8DenomWeight,
+              },
+              test9: {
+                sum: msTest9Sum,
+                featureCount: msTest9Values.length,
+                weight: msTest9Weight,
+                contribution: msTest9Contribution,
+                denomWeight: msTest9DenomWeight,
+              },
+              test10: {
+                sum: msTest10Sum,
+                featureCount: msTest10Values.length,
+                weight: msTest10Weight,
+                contribution: msTest10Contribution,
+                denomWeight: msTest10DenomWeight,
+              },
+              test11: {
+                sum: msTest11Sum,
+                featureCount: msTest11Values.length,
+                weight: msTest11Weight,
+                contribution: msTest11Contribution,
+                denomWeight: msTest11DenomWeight,
+              },
+              test12: {
+                sum: msTest12Sum,
+                featureCount: msTest12Values.length,
+                weight: msTest12Weight,
+                contribution: msTest12Contribution,
+                denomWeight: msTest12DenomWeight,
+              },
+              test13: {
+                sum: msTest13Sum,
+                featureCount: msTest13Values.length,
+                weight: msTest13Weight,
+                contribution: msTest13Contribution,
+                denomWeight: msTest13DenomWeight,
+              },
+            },
+            totalWeightedContributions: msTotalWeightedContributions,
+            totalWeights: msTotalWeights,
+          };
+        }
+
+        console.log("[compute-all][MS] All MS calculations complete:");
+        console.log("[compute-all][MS] Results:", msResults);
+
+        // Calculate Decision / Cognition (DC) for each player (4th index of 4D cluster vector)
+        console.log("[compute-all][DC] evaluation:", evaluationId);
+        console.log(
+          "[compute-all][DC] Starting Decision / Cognition calculations..."
+        );
+
+        const dcResults: Record<string, any> = {};
+
+        for (const [playerId, row] of Object.entries(computedByPlayer)) {
+          const playerName =
+            playersById.get(playerId)?.name ?? "Unknown Player";
+          const norm = (row as any).norm;
+
+          console.log(`[compute-all][DC] Player: ${playerName} (${playerId})`);
+
+          // DC definition (same style as PS/TC/MS):
+          // numerator   = Σ(featureValue * testWeight)
+          // denominator = Σ(featureCount * testWeight)
+
+          // Test 1: Shot Power (weight = 1)
+          const dcTest1Values = [
+            norm.shot_power_strong_avg_norm,
+            norm.shot_power_weak_avg_norm,
+            norm.shot_power_strong_max_norm,
+            norm.shot_power_weak_max_norm,
+          ].filter((v): v is number => v !== null && typeof v === "number");
+          const dcTest1Sum = dcTest1Values.reduce((sum, v) => sum + v, 0);
+          const dcTest1Weight = 1;
+          const dcTest1Contribution = dcTest1Sum * dcTest1Weight;
+          const dcTest1DenomWeight = dcTest1Values.length * dcTest1Weight;
+          console.log(
+            `[compute-all][DC] Test 1 (Shot Power): values=${JSON.stringify(
+              dcTest1Values
+            )}, sum=${dcTest1Sum.toFixed(
+              6
+            )}, weight=${dcTest1Weight}, contribution=${dcTest1Contribution.toFixed(
+              6
+            )}, denomWeight=${dcTest1DenomWeight}`
+          );
+
+          // Test 3: Figure 8 Dribble (weight = 1)
+          const dcTest3Values = [
+            norm.figure8_loops_strong_norm,
+            norm.figure8_loops_weak_norm,
+            norm.figure8_loops_both_norm,
+          ].filter((v): v is number => v !== null && typeof v === "number");
+          const dcTest3Sum = dcTest3Values.reduce((sum, v) => sum + v, 0);
+          const dcTest3Weight = 1;
+          const dcTest3Contribution = dcTest3Sum * dcTest3Weight;
+          const dcTest3DenomWeight = dcTest3Values.length * dcTest3Weight;
+          console.log(
+            `[compute-all][DC] Test 3 (Figure 8 Dribble): values=${JSON.stringify(
+              dcTest3Values
+            )}, sum=${dcTest3Sum.toFixed(
+              6
+            )}, weight=${dcTest3Weight}, contribution=${dcTest3Contribution.toFixed(
+              6
+            )}, denomWeight=${dcTest3DenomWeight}`
+          );
+
+          // Test 4: Passing Gates (weight = 2)
+          const dcTest4Values = [
+            norm.passing_gates_strong_hits_norm,
+            norm.passing_gates_weak_hits_norm,
+            norm.passing_gates_total_hits_norm,
+          ].filter((v): v is number => v !== null && typeof v === "number");
+          const dcTest4Sum = dcTest4Values.reduce((sum, v) => sum + v, 0);
+          const dcTest4Weight = 2;
+          const dcTest4Contribution = dcTest4Sum * dcTest4Weight;
+          const dcTest4DenomWeight = dcTest4Values.length * dcTest4Weight;
+          console.log(
+            `[compute-all][DC] Test 4 (Passing Gates): values=${JSON.stringify(
+              dcTest4Values
+            )}, sum=${dcTest4Sum.toFixed(
+              6
+            )}, weight=${dcTest4Weight}, contribution=${dcTest4Contribution.toFixed(
+              6
+            )}, denomWeight=${dcTest4DenomWeight}`
+          );
+
+          // Test 5: 1v1 Competitive Score (weight = 3)
+          const dcTest5Values = [
+            norm.one_v_one_avg_score_norm,
+            norm.one_v_one_rounds_played_norm,
+          ].filter((v): v is number => v !== null && typeof v === "number");
+          const dcTest5Sum = dcTest5Values.reduce((sum, v) => sum + v, 0);
+          const dcTest5Weight = 3;
+          const dcTest5Contribution = dcTest5Sum * dcTest5Weight;
+          const dcTest5DenomWeight = dcTest5Values.length * dcTest5Weight;
+          console.log(
+            `[compute-all][DC] Test 5 (1v1 Competitive Score): values=${JSON.stringify(
+              dcTest5Values
+            )}, sum=${dcTest5Sum.toFixed(
+              6
+            )}, weight=${dcTest5Weight}, contribution=${dcTest5Contribution.toFixed(
+              6
+            )}, denomWeight=${dcTest5DenomWeight}`
+          );
+
+          // Test 7: Skill Moves Rating (weight = 2)
+          const dcTest7Values = [
+            norm.skill_moves_avg_rating_norm,
+            norm.skill_moves_count_norm,
+          ].filter((v): v is number => v !== null && typeof v === "number");
+          const dcTest7Sum = dcTest7Values.reduce((sum, v) => sum + v, 0);
+          const dcTest7Weight = 2;
+          const dcTest7Contribution = dcTest7Sum * dcTest7Weight;
+          const dcTest7DenomWeight = dcTest7Values.length * dcTest7Weight;
+          console.log(
+            `[compute-all][DC] Test 7 (Skill Moves Rating): values=${JSON.stringify(
+              dcTest7Values
+            )}, sum=${dcTest7Sum.toFixed(
+              6
+            )}, weight=${dcTest7Weight}, contribution=${dcTest7Contribution.toFixed(
+              6
+            )}, denomWeight=${dcTest7DenomWeight}`
+          );
+
+          // Test 8: 5-10-5 Pro Agility (weight = 1)
+          const dcTest8Values = [
+            norm.agility_5_10_5_best_time_norm,
+            norm.agility_5_10_5_avg_time_norm,
+          ].filter((v): v is number => v !== null && typeof v === "number");
+          const dcTest8Sum = dcTest8Values.reduce((sum, v) => sum + v, 0);
+          const dcTest8Weight = 1;
+          const dcTest8Contribution = dcTest8Sum * dcTest8Weight;
+          const dcTest8DenomWeight = dcTest8Values.length * dcTest8Weight;
+          console.log(
+            `[compute-all][DC] Test 8 (5-10-5 Pro Agility): values=${JSON.stringify(
+              dcTest8Values
+            )}, sum=${dcTest8Sum.toFixed(
+              6
+            )}, weight=${dcTest8Weight}, contribution=${dcTest8Contribution.toFixed(
+              6
+            )}, denomWeight=${dcTest8DenomWeight}`
+          );
+
+          // Test 9: Reaction Test 5m Start (weight = 3)
+          const dcTest9Values = [
+            norm.reaction_5m_reaction_time_avg_norm,
+            norm.reaction_5m_total_time_avg_norm,
+          ].filter((v): v is number => v !== null && typeof v === "number");
+          const dcTest9Sum = dcTest9Values.reduce((sum, v) => sum + v, 0);
+          const dcTest9Weight = 3;
+          const dcTest9Contribution = dcTest9Sum * dcTest9Weight;
+          const dcTest9DenomWeight = dcTest9Values.length * dcTest9Weight;
+          console.log(
+            `[compute-all][DC] Test 9 (Reaction Test 5m Start): values=${JSON.stringify(
+              dcTest9Values
+            )}, sum=${dcTest9Sum.toFixed(
+              6
+            )}, weight=${dcTest9Weight}, contribution=${dcTest9Contribution.toFixed(
+              6
+            )}, denomWeight=${dcTest9DenomWeight}`
+          );
+
+          const dcTotalWeightedContributions =
+            dcTest1Contribution +
+            dcTest3Contribution +
+            dcTest4Contribution +
+            dcTest5Contribution +
+            dcTest7Contribution +
+            dcTest8Contribution +
+            dcTest9Contribution;
+
+          const dcTotalWeights =
+            dcTest1DenomWeight +
+            dcTest3DenomWeight +
+            dcTest4DenomWeight +
+            dcTest5DenomWeight +
+            dcTest7DenomWeight +
+            dcTest8DenomWeight +
+            dcTest9DenomWeight;
+
+          const dcScore =
+            dcTotalWeights > 0
+              ? dcTotalWeightedContributions / dcTotalWeights
+              : null;
+
+          console.log(
+            `[compute-all][DC] ${playerName}: totalWeightedContributions=${dcTotalWeightedContributions.toFixed(
+              6
+            )}, totalWeights=${dcTotalWeights}, DC=${
+              dcScore !== null ? dcScore.toFixed(4) : "null"
+            }`
+          );
+
+          dcResults[playerId] = {
+            playerName,
+            dcScore,
+            testContributions: {
+              test1: {
+                sum: dcTest1Sum,
+                featureCount: dcTest1Values.length,
+                weight: dcTest1Weight,
+                contribution: dcTest1Contribution,
+                denomWeight: dcTest1DenomWeight,
+              },
+              test3: {
+                sum: dcTest3Sum,
+                featureCount: dcTest3Values.length,
+                weight: dcTest3Weight,
+                contribution: dcTest3Contribution,
+                denomWeight: dcTest3DenomWeight,
+              },
+              test4: {
+                sum: dcTest4Sum,
+                featureCount: dcTest4Values.length,
+                weight: dcTest4Weight,
+                contribution: dcTest4Contribution,
+                denomWeight: dcTest4DenomWeight,
+              },
+              test5: {
+                sum: dcTest5Sum,
+                featureCount: dcTest5Values.length,
+                weight: dcTest5Weight,
+                contribution: dcTest5Contribution,
+                denomWeight: dcTest5DenomWeight,
+              },
+              test7: {
+                sum: dcTest7Sum,
+                featureCount: dcTest7Values.length,
+                weight: dcTest7Weight,
+                contribution: dcTest7Contribution,
+                denomWeight: dcTest7DenomWeight,
+              },
+              test8: {
+                sum: dcTest8Sum,
+                featureCount: dcTest8Values.length,
+                weight: dcTest8Weight,
+                contribution: dcTest8Contribution,
+                denomWeight: dcTest8DenomWeight,
+              },
+              test9: {
+                sum: dcTest9Sum,
+                featureCount: dcTest9Values.length,
+                weight: dcTest9Weight,
+                contribution: dcTest9Contribution,
+                denomWeight: dcTest9DenomWeight,
+              },
+            },
+            totalWeightedContributions: dcTotalWeightedContributions,
+            totalWeights: dcTotalWeights,
+          };
+        }
+
+        console.log("[compute-all][DC] All DC calculations complete:");
+        console.log("[compute-all][DC] Results:", dcResults);
+
+        // Persist to database (PlayerEvaluations + TestScores + OverallScores + PlayerDNA + PlayerCluster)
         for (const [playerId, row] of Object.entries(computedByPlayer)) {
           const peRes = await client.query(
             `
@@ -1425,6 +2652,32 @@ export async function POST(
           DO UPDATE SET dna = EXCLUDED.dna
           `,
             [playerEvaluationId, JSON.stringify((row as any).norm ?? {})]
+          );
+
+          const playerCluster = {
+            ps: psResults[playerId]?.psScore ?? null,
+            tc: tcResults[playerId]?.tcScore ?? null,
+            ms: msResults[playerId]?.msScore ?? null,
+            dc: dcResults[playerId]?.dcScore ?? null,
+          };
+          const playerClusterWithVector = {
+            ...playerCluster,
+            vector: [
+              playerCluster.ps,
+              playerCluster.tc,
+              playerCluster.ms,
+              playerCluster.dc,
+            ],
+          };
+
+          await client.query(
+            `
+          INSERT INTO player_cluster (player_evaluation_id, cluster)
+          VALUES ($1, $2::jsonb)
+          ON CONFLICT (player_evaluation_id)
+          DO UPDATE SET cluster = EXCLUDED.cluster
+          `,
+            [playerEvaluationId, JSON.stringify(playerClusterWithVector)]
           );
 
           playerEvaluationsUpserted += 1;
@@ -2389,11 +3642,12 @@ export async function POST(
       } catch {}
       throw error;
     } finally {
+      clientReleased = true;
       client.release();
     }
 
     return new NextResponse(
-      `ok team=${teamId} evaluationsComputed=${evaluationsResult.rows.length} playerEvaluationsUpserted=${playerEvaluationsUpserted}\n`,
+      `ok team=${teamId} evaluationsComputed=${evaluationsToCompute.length} playerEvaluationsUpserted=${playerEvaluationsUpserted}\n`,
       {
         status: 200,
         headers: { "content-type": "text/plain; charset=utf-8" },
@@ -2408,5 +3662,9 @@ export async function POST(
         headers: { "content-type": "text/plain; charset=utf-8" },
       }
     );
+  } finally {
+    if (!clientReleased) {
+      client.release();
+    }
   }
 }

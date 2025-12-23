@@ -82,9 +82,8 @@ export default function TeamsPage() {
         currentUserRole = profileData.user.role;
         setUserRole(currentUserRole);
         
-        // Players cannot access teams page
-        if (currentUserRole === "player") {
-          router.push("/dashboard");
+        // Players/parents cannot access teams page
+        if (currentUserRole === "player" || currentUserRole === "parent") {
           return;
         }
       }
@@ -110,9 +109,9 @@ export default function TeamsPage() {
 
         if (coachesRes.ok) {
           const coachesData = await coachesRes.json();
-          // Filter only coaches
+          // Filter coaches, admins, and owners (admins and owners can also be coaches)
           const coachMembers = coachesData.members.filter(
-            (member: any) => member.role === "coach"
+            (member: any) => ["coach", "admin", "owner"].includes(member.role)
           );
           setCoaches(
             coachMembers.map((member: any) => ({
@@ -244,6 +243,24 @@ export default function TeamsPage() {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <p className="text-white/70">Loading...</p>
+      </div>
+    );
+  }
+
+  if (userRole === "player" || userRole === "parent") {
+    return (
+      <div className="max-w-3xl mx-auto">
+        <div className="rounded-2xl border border-white/10 bg-black/60 p-8 text-center">
+          <h1 className="text-2xl font-bold text-white mb-2">
+            You don’t have access to this page
+          </h1>
+          <p className="text-white/70 mb-6">
+            Teams are for coaches and staff. Go back to see your players.
+          </p>
+          <Button onClick={() => router.push("/dashboard/players")}>
+            Back to My Players
+          </Button>
+        </div>
       </div>
     );
   }

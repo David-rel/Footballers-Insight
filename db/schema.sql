@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS curriculums (
     name VARCHAR(255) NOT NULL,
     description TEXT,
     tests JSONB DEFAULT '[]'::jsonb,
+    created_by UUID REFERENCES users(id) ON DELETE SET NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -84,6 +85,7 @@ CREATE TABLE IF NOT EXISTS teams (
 CREATE INDEX IF NOT EXISTS idx_teams_company_id ON teams(company_id);
 CREATE INDEX IF NOT EXISTS idx_teams_coach_id ON teams(coach_id);
 CREATE INDEX IF NOT EXISTS idx_teams_curriculum_id ON teams(curriculum_id);
+CREATE INDEX IF NOT EXISTS idx_curriculums_created_by ON curriculums(created_by);
 
 -- Create triggers to automatically update updated_at
 DROP TRIGGER IF EXISTS update_curriculums_updated_at ON curriculums;
@@ -212,5 +214,22 @@ CREATE INDEX IF NOT EXISTS idx_player_dna_player_evaluation_id ON player_dna(pla
 
 DROP TRIGGER IF EXISTS update_player_dna_updated_at ON player_dna;
 CREATE TRIGGER update_player_dna_updated_at BEFORE UPDATE ON player_dna
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Player Cluster: 4D cluster vector values (per player evaluation)
+-- Stores: { ps, tc, ms, dc, vector: [ps, tc, ms, dc] }
+CREATE TABLE IF NOT EXISTS player_cluster (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    player_evaluation_id UUID NOT NULL REFERENCES player_evaluations(id) ON DELETE CASCADE,
+    cluster JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(player_evaluation_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_player_cluster_player_evaluation_id ON player_cluster(player_evaluation_id);
+
+DROP TRIGGER IF EXISTS update_player_cluster_updated_at ON player_cluster;
+CREATE TRIGGER update_player_cluster_updated_at BEFORE UPDATE ON player_cluster
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 

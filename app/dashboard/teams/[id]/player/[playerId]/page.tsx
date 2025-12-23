@@ -17,6 +17,7 @@ import {
   X,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
+import PlayerEvaluationPanel from "@/components/features/PlayerEvaluationPanel";
 
 interface Player {
   id: string;
@@ -425,6 +426,11 @@ export default function PlayerDetailPage() {
           <p className="text-white/90 whitespace-pre-wrap">{player.notes}</p>
         </div>
       )}
+
+      {/* Evaluation Data */}
+      <div className="mb-6">
+        <PlayerEvaluationPanel teamId={teamId} playerId={playerId} />
+      </div>
 
       {/* Additional Information */}
       <div className="rounded-2xl border border-white/10 bg-black/60 p-6">

@@ -110,7 +110,8 @@ export async function GET(
       name: row.name,
       oneVOneRounds: row.one_v_one_rounds,
       skillMovesCount: row.skill_moves_count,
-      scores: typeof row.scores === "string" ? JSON.parse(row.scores) : row.scores,
+      scores:
+        typeof row.scores === "string" ? JSON.parse(row.scores) : row.scores,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }));
@@ -231,7 +232,10 @@ export async function POST(
           name: evaluation.name,
           oneVOneRounds: evaluation.one_v_one_rounds,
           skillMovesCount: evaluation.skill_moves_count,
-          scores: typeof evaluation.scores === "string" ? JSON.parse(evaluation.scores) : evaluation.scores,
+          scores:
+            typeof evaluation.scores === "string"
+              ? JSON.parse(evaluation.scores)
+              : evaluation.scores,
           createdAt: evaluation.created_at,
           updatedAt: evaluation.updated_at,
         },
@@ -246,4 +250,3 @@ export async function POST(
     );
   }
 }
-

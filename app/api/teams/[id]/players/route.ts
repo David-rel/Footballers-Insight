@@ -271,9 +271,10 @@ export async function POST(
     const loginUrl = `${origin}/login`;
 
     // Get team name (for emails)
-    const teamNameResult = await pool.query("SELECT name FROM teams WHERE id = $1", [
-      teamId,
-    ]);
+    const teamNameResult = await pool.query(
+      "SELECT name FROM teams WHERE id = $1",
+      [teamId]
+    );
     const teamName = teamNameResult.rows[0]?.name || "Your Team";
 
     if (wantsParent) {
@@ -354,7 +355,9 @@ export async function POST(
           Math.random().toString(36).slice(-12).toUpperCase() +
           "!@#";
         const hashedPassword = await bcrypt.hash(tempPassword, 10);
-        const emailCode = Math.floor(100000 + Math.random() * 900000).toString();
+        const emailCode = Math.floor(
+          100000 + Math.random() * 900000
+        ).toString();
 
         const newUserResult = await pool.query(
           `INSERT INTO users (name, email, hashed_password, role, company_id, email_code, email_verified, onboarded)
@@ -385,7 +388,9 @@ export async function POST(
       // Self-supervised player: login account is still a 'parent' role user (same person)
       if (!selfSupervisorEmail) {
         return NextResponse.json(
-          { error: "Supervisor email is required for self-supervised players." },
+          {
+            error: "Supervisor email is required for self-supervised players.",
+          },
           { status: 400 }
         );
       }
@@ -421,9 +426,10 @@ export async function POST(
         // Notify existing user that a player was added/linked
         try {
           // self-supervised may not have a perfect name; use DB name if available
-          const nameRes = await pool.query("SELECT name FROM users WHERE id = $1", [
-            u.id,
-          ]);
+          const nameRes = await pool.query(
+            "SELECT name FROM users WHERE id = $1",
+            [u.id]
+          );
           await sendPlayerAddedNotificationEmail(
             selfSupervisorEmail,
             nameRes.rows[0]?.name || "Parent",
@@ -443,7 +449,9 @@ export async function POST(
           Math.random().toString(36).slice(-12).toUpperCase() +
           "!@#";
         const hashedPassword = await bcrypt.hash(tempPassword, 10);
-        const emailCode = Math.floor(100000 + Math.random() * 900000).toString();
+        const emailCode = Math.floor(
+          100000 + Math.random() * 900000
+        ).toString();
 
         // Name is required by schema; for self-supervised we store the player's name.
         const derivedName = `${firstName} ${lastName}`;
@@ -452,7 +460,13 @@ export async function POST(
           `INSERT INTO users (name, email, hashed_password, role, company_id, email_code, email_verified, onboarded)
            VALUES ($1, $2, $3, 'parent', $4, $5, TRUE, FALSE)
            RETURNING id`,
-          [derivedName, selfSupervisorEmail, hashedPassword, companyId, emailCode]
+          [
+            derivedName,
+            selfSupervisorEmail,
+            hashedPassword,
+            companyId,
+            emailCode,
+          ]
         );
         supervisorUserId = newUserResult.rows[0].id;
 
@@ -467,7 +481,10 @@ export async function POST(
             true
           );
         } catch (emailError) {
-          console.error("Failed to send self-supervised invitation email:", emailError);
+          console.error(
+            "Failed to send self-supervised invitation email:",
+            emailError
+          );
         }
       }
     }

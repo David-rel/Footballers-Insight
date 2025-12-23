@@ -14,40 +14,51 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
-    // Coaches, players, and parents cannot access curriculums
+    // Get user role
     const userResult = await pool.query(
       "SELECT role FROM users WHERE id = $1",
       [session.user.id]
     );
 
-    if (userResult.rows.length > 0) {
-      const role = userResult.rows[0].role;
-      if (role === "coach" || role === "player" || role === "parent") {
-        return NextResponse.json(
-          { error: "Access denied" },
-          { status: 403 }
-        );
-      }
+    if (userResult.rows.length === 0) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // Get all curriculums
-    const curriculumsResult = await pool.query(
-      `SELECT id, name, description, tests, created_at, updated_at
-       FROM curriculums
-       ORDER BY name`
-    );
+    const role = userResult.rows[0].role;
+
+    // Players and parents cannot access curriculums
+    if (role === "player" || role === "parent") {
+      return NextResponse.json({ error: "Access denied" }, { status: 403 });
+    }
+
+    // Coaches can only see curriculums they created
+    // Admins and owners can see all curriculums
+    let curriculumsQuery = `
+      SELECT id, name, description, tests, created_by, created_at, updated_at
+      FROM curriculums
+    `;
+    const queryParams: any[] = [];
+
+    if (role === "coach") {
+      curriculumsQuery += ` WHERE created_by = $1`;
+      queryParams.push(session.user.id);
+    }
+
+    curriculumsQuery += ` ORDER BY name`;
+
+    const curriculumsResult = await pool.query(curriculumsQuery, queryParams);
 
     const curriculums = curriculumsResult.rows.map((row) => {
       // Parse JSONB tests field
-      const testsArray = typeof row.tests === 'string' 
-        ? JSON.parse(row.tests) 
-        : (row.tests || []);
-      
+      const testsArray =
+        typeof row.tests === "string" ? JSON.parse(row.tests) : row.tests || [];
+
       return {
         id: row.id,
         name: row.name,
         description: row.description,
         tests: testsArray,
+        createdBy: row.created_by,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
       };
@@ -72,20 +83,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
-    // Coaches, players, and parents cannot create curriculums
+    // Get user role
     const userResult = await pool.query(
       "SELECT role FROM users WHERE id = $1",
       [session.user.id]
     );
 
-    if (userResult.rows.length > 0) {
-      const role = userResult.rows[0].role;
-      if (role === "coach" || role === "player" || role === "parent") {
-        return NextResponse.json(
-          { error: "Access denied" },
-          { status: 403 }
-        );
-      }
+    if (userResult.rows.length === 0) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    const role = userResult.rows[0].role;
+
+    // Players and parents cannot create curriculums
+    // Coaches, admins, and owners can create curriculums
+    if (role === "player" || role === "parent") {
+      return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
 
     const body = await request.json();
@@ -106,20 +119,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create the curriculum
+    // Create the curriculum with created_by
     const insertResult = await pool.query(
-      `INSERT INTO curriculums (name, description, tests)
-       VALUES ($1, $2, $3::jsonb)
-       RETURNING id, name, description, tests, created_at, updated_at`,
-      [name, description || null, tests ? JSON.stringify(tests) : "[]"]
+      `INSERT INTO curriculums (name, description, tests, created_by)
+       VALUES ($1, $2, $3::jsonb, $4)
+       RETURNING id, name, description, tests, created_by, created_at, updated_at`,
+      [
+        name,
+        description || null,
+        tests ? JSON.stringify(tests) : "[]",
+        session.user.id,
+      ]
     );
 
     const curriculum = insertResult.rows[0];
 
     // Parse JSONB tests field
-    const testsArray = typeof curriculum.tests === 'string' 
-      ? JSON.parse(curriculum.tests) 
-      : (curriculum.tests || []);
+    const testsArray =
+      typeof curriculum.tests === "string"
+        ? JSON.parse(curriculum.tests)
+        : curriculum.tests || [];
 
     return NextResponse.json(
       {
@@ -128,6 +147,7 @@ export async function POST(request: NextRequest) {
           name: curriculum.name,
           description: curriculum.description,
           tests: testsArray,
+          createdBy: curriculum.created_by,
           createdAt: curriculum.created_at,
           updatedAt: curriculum.updated_at,
         },
@@ -142,4 +162,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

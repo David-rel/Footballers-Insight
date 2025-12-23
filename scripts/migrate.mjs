@@ -174,7 +174,43 @@ async function runMigration() {
       }
     }
 
-    // Step 3: Apply the new schema (CREATE TABLE IF NOT EXISTS, triggers, indexes, etc.)
+    // Step 3: Add created_by column to curriculums if it doesn't exist
+    const curriculumsTableExists = await client.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'curriculums'
+      );
+    `);
+
+    if (curriculumsTableExists.rows[0].exists) {
+      const hasCreatedBy = await client.query(`
+        SELECT EXISTS (
+          SELECT 1
+          FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'curriculums'
+            AND column_name = 'created_by'
+        ) AS exists;
+      `);
+
+      if (!hasCreatedBy.rows[0].exists) {
+        console.log("🔄 Adding created_by column to curriculums table...");
+
+        await client.query(`
+          ALTER TABLE curriculums
+          ADD COLUMN created_by UUID REFERENCES users(id) ON DELETE SET NULL;
+        `);
+
+        await client.query(`
+          CREATE INDEX IF NOT EXISTS idx_curriculums_created_by ON curriculums(created_by);
+        `);
+
+        console.log("✅ Created_by column added to curriculums table.");
+      }
+    }
+
+    // Step 4: Apply the new schema (CREATE TABLE IF NOT EXISTS, triggers, indexes, etc.)
     await client.query(sql);
     await client.query("COMMIT");
     console.log("✅ Schema applied successfully.");
