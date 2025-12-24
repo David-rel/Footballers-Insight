@@ -263,6 +263,7 @@ export async function GET(
           clusterLeaders: [],
           testLeaders: [],
           movers: { mostImproved: [], biggestDrop: [] },
+          allPlayerChanges: [],
         },
         { status: 200 }
       );
@@ -400,6 +401,7 @@ export async function GET(
     // Movers: compare latest vs previous evaluation (if exists)
     const mostImproved: Array<any> = [];
     const biggestDrop: Array<any> = [];
+    let allPlayerChanges: Array<any> = [];
 
     if (previousEval) {
       const prevRows = await pool.query(
@@ -556,6 +558,15 @@ export async function GET(
         .sort((a, b) => a.score - b.score)
         .slice(0, 5);
 
+      allPlayerChanges = [...scores]
+        .map((row) => ({
+          playerId: row.playerId,
+          playerName: nameByPlayerId.get(row.playerId) ?? "Player",
+          scorePct: row.scorePct,
+          changes: row.changes,
+        }))
+        .sort((a, b) => a.playerName.localeCompare(b.playerName));
+
       for (const row of top) {
         mostImproved.push({
           playerId: row.playerId,
@@ -599,6 +610,7 @@ export async function GET(
           rankings: t.rankings,
         })),
         movers: { mostImproved, biggestDrop },
+        allPlayerChanges,
       },
       { status: 200 }
     );

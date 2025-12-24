@@ -95,15 +95,22 @@ type TeamLeaderboardsResponse = {
   clusterRankings: ClusterRanking[];
   testRankings: TestRanking[];
   movers: Movers;
+  allPlayerChanges?: any[];
 };
 
-export default function TeamLeaderboardsPanel({ teamId }: { teamId: string }) {
+export default function TeamLeaderboardsPanel({
+  teamId,
+  hideMovers = false,
+}: {
+  teamId: string;
+  hideMovers?: boolean;
+}) {
   const [data, setData] = useState<TeamLeaderboardsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [showTests, setShowTests] = useState(false);
-  const [showMovers, setShowMovers] = useState(true);
+  const [showMovers, setShowMovers] = useState(!hideMovers);
   const [openCluster, setOpenCluster] = useState<Record<string, boolean>>({});
   const [openTests, setOpenTests] = useState<Record<string, boolean>>({});
 
@@ -113,6 +120,7 @@ export default function TeamLeaderboardsPanel({ teamId }: { teamId: string }) {
       try {
         setLoading(true);
         setError(null);
+        setShowMovers(!hideMovers);
         const res = await fetch(`/api/teams/${teamId}/leaderboards`);
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
@@ -192,13 +200,15 @@ export default function TeamLeaderboardsPanel({ teamId }: { teamId: string }) {
           >
             {showTests ? "Hide 13 tests" : "Show 13 tests"}
           </Button>
-          <Button
-            variant="outline"
-            className="border-white/10 text-white/80 hover:bg-white/10"
-            onClick={() => setShowMovers((v) => !v)}
-          >
-            {showMovers ? "Hide improvements" : "Show improvements"}
-          </Button>
+          {!hideMovers ? (
+            <Button
+              variant="outline"
+              className="border-white/10 text-white/80 hover:bg-white/10"
+              onClick={() => setShowMovers((v) => !v)}
+            >
+              {showMovers ? "Hide improvements" : "Show improvements"}
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -345,7 +355,7 @@ export default function TeamLeaderboardsPanel({ teamId }: { teamId: string }) {
       ) : null}
 
       {/* Movers */}
-      {showMovers ? (
+      {!hideMovers && showMovers ? (
         <div className="mt-6">
           <div className="text-white font-bold text-lg mb-3">
             Improvements since last check-in

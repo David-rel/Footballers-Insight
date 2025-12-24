@@ -275,3 +275,45 @@ DROP TRIGGER IF EXISTS update_player_ai_chat_threads_updated_at ON player_ai_cha
 CREATE TRIGGER update_player_ai_chat_threads_updated_at BEFORE UPDATE ON player_ai_chat_threads
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+-- Team AI Analysis: cached AI report per team (invalidated when new team evaluation is created)
+CREATE TABLE IF NOT EXISTS team_ai_analysis (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    team_id UUID NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    -- The newest evaluation that this report is based on
+    source_evaluation_id UUID NOT NULL REFERENCES evaluations(id) ON DELETE CASCADE,
+    source_evaluation_created_at TIMESTAMP NOT NULL,
+    model VARCHAR(64) NOT NULL,
+    report JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(team_id, source_evaluation_id, model)
+);
+
+CREATE INDEX IF NOT EXISTS idx_team_ai_analysis_team_id ON team_ai_analysis(team_id);
+CREATE INDEX IF NOT EXISTS idx_team_ai_analysis_company_id ON team_ai_analysis(company_id);
+CREATE INDEX IF NOT EXISTS idx_team_ai_analysis_source_evaluation_id ON team_ai_analysis(source_evaluation_id);
+CREATE INDEX IF NOT EXISTS idx_team_ai_analysis_created_at ON team_ai_analysis(created_at);
+
+-- Team AI Chat Threads: stores OpenAI Responses API continuation id + message history
+CREATE TABLE IF NOT EXISTS team_ai_chat_threads (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    team_id UUID NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    model VARCHAR(64) NOT NULL,
+    context JSONB NOT NULL DEFAULT '{}'::jsonb,
+    messages JSONB NOT NULL DEFAULT '[]'::jsonb,
+    last_response_id TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_team_ai_chat_threads_team_id ON team_ai_chat_threads(team_id);
+CREATE INDEX IF NOT EXISTS idx_team_ai_chat_threads_user_id ON team_ai_chat_threads(user_id);
+CREATE INDEX IF NOT EXISTS idx_team_ai_chat_threads_company_id ON team_ai_chat_threads(company_id);
+CREATE INDEX IF NOT EXISTS idx_team_ai_chat_threads_updated_at ON team_ai_chat_threads(updated_at);
+
+DROP TRIGGER IF EXISTS update_team_ai_chat_threads_updated_at ON team_ai_chat_threads;
+CREATE TRIGGER update_team_ai_chat_threads_updated_at BEFORE UPDATE ON team_ai_chat_threads
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
