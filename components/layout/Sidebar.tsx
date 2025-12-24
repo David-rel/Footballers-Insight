@@ -86,7 +86,7 @@ export default function Sidebar({
 
   function aiLabelForRole(role: string | null) {
     if (role === "coach") return "Team AI Analysis";
-    if (role === "owner" || role === "admin") return "Company AI Analysis";
+    if (role === "owner" || role === "admin") return "Company Stats Analysis";
     if (role === "player" || role === "parent") return "Player AI Analysis";
     return "AI Analysis";
   }

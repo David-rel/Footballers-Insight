@@ -22,6 +22,14 @@ type TeamPlayer = {
   gender?: string | null;
 };
 
+type CachedPlayerAiReport = {
+  report: any;
+  cached: boolean;
+  createdAt?: string | null;
+  stale?: boolean;
+  message?: string;
+};
+
 type TeamLeaderboardsAllChanges = {
   latestEvaluation: { id: string; name: string; createdAt: string } | null;
   previousEvaluation: { id: string; name: string; createdAt: string } | null;
@@ -87,7 +95,7 @@ function isAiTeamReport(v: any): v is AiTeamReport {
 
 function titleForRole(role: Role | null) {
   if (role === "coach") return "Team AI Analysis";
-  if (role === "owner" || role === "admin") return "Company AI Analysis";
+  if (role === "owner" || role === "admin") return "Company Stats Analysis";
   return "AI Analysis";
 }
 
@@ -139,6 +147,18 @@ export function AiStatsCoachTeamView() {
   const [chatSending, setChatSending] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
   const [chatHasMemory, setChatHasMemory] = useState(false);
+
+  // Player AI view (coach can only see if cached exists)
+  const [playerAiOpen, setPlayerAiOpen] = useState(false);
+  const [playerAiLoading, setPlayerAiLoading] = useState(false);
+  const [playerAiError, setPlayerAiError] = useState<string | null>(null);
+  const [playerAiSelected, setPlayerAiSelected] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
+  const [playerAiData, setPlayerAiData] = useState<CachedPlayerAiReport | null>(
+    null
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -265,6 +285,11 @@ export function AiStatsCoachTeamView() {
     setChatSending(false);
     setChatError(null);
     setChatHasMemory(false);
+    setPlayerAiOpen(false);
+    setPlayerAiLoading(false);
+    setPlayerAiError(null);
+    setPlayerAiSelected(null);
+    setPlayerAiData(null);
   }, [selectedTeamId]);
 
   // Generate team AI report (hide all team data until ready)
@@ -895,6 +920,205 @@ export function AiStatsCoachTeamView() {
               </div>
             ) : null}
 
+            {playerAiOpen && playerAiSelected ? (
+              <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6">
+                <button
+                  type="button"
+                  aria-label="Close player AI"
+                  onClick={() => setPlayerAiOpen(false)}
+                  className="absolute inset-0 bg-black/70"
+                />
+                <div className="relative w-full max-w-2xl rounded-2xl border border-white/10 bg-[#0b0f14] shadow-xl overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+                    <div>
+                      <div className="text-white font-semibold">
+                        Player AI Analysis
+                      </div>
+                      <div className="text-xs text-white/50">
+                        {playerAiSelected.name}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setPlayerAiOpen(false)}
+                      className="text-white/70 hover:text-white text-sm font-semibold px-3 py-2 rounded-lg bg-white/5 border border-white/10"
+                    >
+                      Close
+                    </button>
+                  </div>
+
+                  <div className="p-4 max-h-[70vh] overflow-y-auto">
+                    {playerAiLoading ? (
+                      <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-white/70 text-sm">
+                        Loading player AI analysis…
+                      </div>
+                    ) : playerAiError ? (
+                      <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4">
+                        <div className="text-red-200 font-semibold">
+                          Player AI analysis not available yet
+                        </div>
+                        <div className="text-red-200/80 text-sm mt-2">
+                          This player hasn’t generated their Player AI Analysis
+                          yet. Ask the player/parent to open the Player AI
+                          Analysis page to generate it.
+                        </div>
+                      </div>
+                    ) : playerAiData?.report ? (
+                      <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-[#e3ca76]/10 via-white/5 to-white/5 p-5">
+                        {playerAiData?.message ? (
+                          <div className="text-xs text-white/60 mb-3">
+                            {playerAiData.message}
+                          </div>
+                        ) : (
+                          <div className="text-xs text-white/60 mb-3">
+                            Showing saved player report. This will update when
+                            the player/parent refreshes it.
+                          </div>
+                        )}
+
+                        {(() => {
+                          const r: any = playerAiData.report;
+                          const toArr = (v: any) =>
+                            Array.isArray(v)
+                              ? v
+                              : typeof v === "string"
+                              ? [v]
+                              : [];
+                          const playerName =
+                            r.playerName ?? playerAiSelected.name;
+                          const checkInName = r.checkInName ?? "Check-in";
+                          const quickSummary =
+                            r.quickSummary ?? r.summary ?? "";
+                          const strengths = toArr(r.strengths);
+                          const areas = toArr(r.areasToImprove);
+                          const top3 = toArr(r.top3Actions);
+                          const next = toArr(r.whatToDoNext);
+                          const tips = toArr(r.coachingTips);
+                          const safety = toArr(r.safetyNotes);
+                          const confidence =
+                            typeof r.confidence === "number"
+                              ? `${Math.round(r.confidence * 100)}%`
+                              : null;
+
+                          return (
+                            <>
+                              <div className="text-white font-bold text-xl">
+                                {playerName} — {checkInName}
+                              </div>
+                              {quickSummary ? (
+                                <div className="text-white/70 text-sm mt-2">
+                                  {quickSummary}
+                                </div>
+                              ) : null}
+                              {confidence ? (
+                                <div className="mt-3 text-xs text-white/50">
+                                  Confidence:{" "}
+                                  <span className="text-white/70 font-semibold">
+                                    {confidence}
+                                  </span>
+                                </div>
+                              ) : null}
+
+                              <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+                                  <div className="text-white font-semibold">
+                                    Strengths
+                                  </div>
+                                  <ul className="mt-2 text-sm text-white/70 list-disc pl-5 space-y-1">
+                                    {strengths
+                                      .slice(0, 10)
+                                      .map((x: string, i: number) => (
+                                        <li key={`ps-${i}`}>{x}</li>
+                                      ))}
+                                  </ul>
+                                </div>
+                                <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+                                  <div className="text-white font-semibold">
+                                    Areas to improve
+                                  </div>
+                                  <ul className="mt-2 text-sm text-white/70 list-disc pl-5 space-y-1">
+                                    {areas
+                                      .slice(0, 10)
+                                      .map((x: string, i: number) => (
+                                        <li key={`pa-${i}`}>{x}</li>
+                                      ))}
+                                  </ul>
+                                </div>
+                              </div>
+
+                              {top3.length ? (
+                                <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4">
+                                  <div className="text-white font-semibold">
+                                    Top 3 actions
+                                  </div>
+                                  <ol className="mt-2 text-sm text-white/70 list-decimal pl-5 space-y-1">
+                                    {top3
+                                      .slice(0, 3)
+                                      .map((x: string, i: number) => (
+                                        <li key={`pt-${i}`}>{x}</li>
+                                      ))}
+                                  </ol>
+                                </div>
+                              ) : null}
+
+                              {next.length ? (
+                                <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4">
+                                  <div className="text-white font-semibold">
+                                    What to do next
+                                  </div>
+                                  <ul className="mt-2 text-sm text-white/70 list-disc pl-5 space-y-1">
+                                    {next
+                                      .slice(0, 10)
+                                      .map((x: string, i: number) => (
+                                        <li key={`pn-${i}`}>{x}</li>
+                                      ))}
+                                  </ul>
+                                </div>
+                              ) : null}
+
+                              {tips.length ? (
+                                <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4">
+                                  <div className="text-white font-semibold">
+                                    Coaching tips
+                                  </div>
+                                  <ul className="mt-2 text-sm text-white/70 list-disc pl-5 space-y-1">
+                                    {tips
+                                      .slice(0, 10)
+                                      .map((x: string, i: number) => (
+                                        <li key={`pct-${i}`}>{x}</li>
+                                      ))}
+                                  </ul>
+                                </div>
+                              ) : null}
+
+                              {safety.length ? (
+                                <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4">
+                                  <div className="text-white font-semibold">
+                                    Safety notes
+                                  </div>
+                                  <ul className="mt-2 text-sm text-white/70 list-disc pl-5 space-y-1">
+                                    {safety
+                                      .slice(0, 10)
+                                      .map((x: string, i: number) => (
+                                        <li key={`psn-${i}`}>{x}</li>
+                                      ))}
+                                  </ul>
+                                </div>
+                              ) : null}
+                            </>
+                          );
+                        })()}
+                      </div>
+                    ) : (
+                      <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-white/70 text-sm">
+                        Player AI analysis not available yet.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
             {/* Only show team data after AI report is ready */}
             {aiReport ? (
               <>
@@ -962,7 +1186,7 @@ export function AiStatsCoachTeamView() {
                                 </div>
                               </div>
 
-                              <div className="text-right">
+                              <div className="text-right space-y-2">
                                 {loadingChanges ? (
                                   <div className="text-xs text-white/50">
                                     Loading changes…
@@ -992,6 +1216,57 @@ export function AiStatsCoachTeamView() {
                                     No comparable stats yet
                                   </div>
                                 )}
+
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    setPlayerAiError(null);
+                                    setPlayerAiData(null);
+                                    setPlayerAiSelected({
+                                      id: p.id,
+                                      name: playerName,
+                                    });
+                                    setPlayerAiOpen(true);
+                                    setPlayerAiLoading(true);
+                                    try {
+                                      const res = await fetch(
+                                        "/api/ai/player-analysis",
+                                        {
+                                          method: "POST",
+                                          headers: {
+                                            "Content-Type": "application/json",
+                                          },
+                                          // Only need player id for cached access; coaches cannot trigger generation.
+                                          body: JSON.stringify({
+                                            player: { id: p.id },
+                                          }),
+                                        }
+                                      );
+                                      const data = await res
+                                        .json()
+                                        .catch(() => null);
+                                      if (!res.ok) {
+                                        throw new Error(
+                                          data?.error ||
+                                            "Player AI analysis not available yet"
+                                        );
+                                      }
+                                      setPlayerAiData(
+                                        data as CachedPlayerAiReport
+                                      );
+                                    } catch (e: any) {
+                                      setPlayerAiError(
+                                        e?.message ||
+                                          "Player AI analysis not available yet"
+                                      );
+                                    } finally {
+                                      setPlayerAiLoading(false);
+                                    }
+                                  }}
+                                  className="text-xs font-semibold px-3 py-2 rounded-lg bg-white/10 hover:bg-white/15 border border-white/10 text-white"
+                                >
+                                  View player AI analysis
+                                </button>
                               </div>
                             </div>
 

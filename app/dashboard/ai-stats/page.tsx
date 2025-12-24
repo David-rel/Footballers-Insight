@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { AiStatsPlayerParentView } from "@/components/features/AiStatsPlayerParentView";
 import { AiStatsCoachTeamView } from "@/components/features/AiStatsCoachTeamView";
+import { AiStatsCompanyAdminView } from "@/components/features/AiStatsCompanyAdminView";
 
 type Role = "owner" | "admin" | "coach" | "parent" | "player";
 
@@ -38,6 +39,10 @@ export default function AIStatsPage() {
 
   if (role === "parent" || role === "player") {
     return <AiStatsPlayerParentView />;
+  }
+
+  if (role === "owner" || role === "admin") {
+    return <AiStatsCompanyAdminView />;
   }
 
   return <AiStatsCoachTeamView />;

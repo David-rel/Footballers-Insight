@@ -7,7 +7,7 @@ type Role = "owner" | "admin" | "coach" | "parent" | "player";
 
 function aiLabelForRole(role: Role | null) {
   if (role === "coach") return "Team AI Analysis";
-  if (role === "owner" || role === "admin") return "Company AI Analysis";
+  if (role === "owner" || role === "admin") return "Company Stats Analysis";
   if (role === "player" || role === "parent") return "Player AI Analysis";
   return "AI Analysis";
 }

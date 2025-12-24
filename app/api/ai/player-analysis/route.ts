@@ -375,20 +375,65 @@ export async function POST(request: NextRequest) {
       [playerId]
     );
 
-    if (cachedRes.rows.length > 0) {
-      const cached = cachedRes.rows[0];
-      const cachedSourceEvalId = cached.source_player_evaluation_id as string;
+    const cachedRow = cachedRes.rows.length > 0 ? cachedRes.rows[0] : null;
+    if (cachedRow) {
+      // NOTE: cached.report can be returned as a string depending on pg config
+      let cachedReport: any = cachedRow.report;
+      if (typeof cachedReport === "string") {
+        try {
+          cachedReport = JSON.parse(cachedReport);
+        } catch {
+          // ignore
+        }
+      }
+
+      const cachedSourceEvalId =
+        cachedRow.source_player_evaluation_id as string;
 
       if (cachedSourceEvalId === latestEvalId) {
         return NextResponse.json(
           {
-            report: cached.report,
+            report: cachedReport,
             cached: true,
-            createdAt: cached.created_at,
+            createdAt: cachedRow.created_at,
+            stale: false,
           },
           { status: 200 }
         );
       }
+    }
+
+    // Coaches/admins/owners can only VIEW an existing report; they must not generate.
+    if (userRole === "coach" || userRole === "admin" || userRole === "owner") {
+      if (cachedRow) {
+        let cachedReport: any = cachedRow.report;
+        if (typeof cachedReport === "string") {
+          try {
+            cachedReport = JSON.parse(cachedReport);
+          } catch {
+            // ignore
+          }
+        }
+        return NextResponse.json(
+          {
+            report: cachedReport,
+            cached: true,
+            createdAt: cachedRow.created_at,
+            stale: true,
+            message:
+              "This player’s AI report is not up to date with the latest check-in. Ask the player/parent to open Player AI Analysis to refresh it.",
+          },
+          { status: 200 }
+        );
+      }
+
+      return NextResponse.json(
+        {
+          error:
+            "This player does not have an AI report yet. Ask the player/parent to open Player AI Analysis to generate it.",
+        },
+        { status: 404 }
+      );
     }
 
     const system = [

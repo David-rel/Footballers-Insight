@@ -329,6 +329,138 @@ async function callOpenAIJsonSchema({
   };
 }
 
+async function getAuthedTeamAccess(sessionUserId: string, teamId: string) {
+  const userResult = await pool.query(
+    "SELECT role, company_id FROM users WHERE id = $1",
+    [sessionUserId]
+  );
+  if (userResult.rows.length === 0) {
+    return { ok: false as const, status: 404, error: "User not found" };
+  }
+  const userRole = userResult.rows[0].role as string;
+  let companyId: string | null = userResult.rows[0].company_id;
+
+  if (userRole === "player" || userRole === "parent") {
+    return { ok: false as const, status: 403, error: "Access denied" };
+  }
+
+  if (userRole === "owner" && !companyId) {
+    const companyResult = await pool.query(
+      "SELECT id FROM companies WHERE owner_id = $1",
+      [sessionUserId]
+    );
+    if (companyResult.rows.length > 0) companyId = companyResult.rows[0].id;
+  }
+  if (!companyId) {
+    return { ok: false as const, status: 404, error: "Company not found" };
+  }
+
+  const teamRes = await pool.query(
+    "SELECT id, name, company_id, coach_id FROM teams WHERE id = $1",
+    [teamId]
+  );
+  if (teamRes.rows.length === 0) {
+    return { ok: false as const, status: 404, error: "Team not found" };
+  }
+  const team = teamRes.rows[0];
+
+  if (userRole === "coach" && team.coach_id !== sessionUserId) {
+    return { ok: false as const, status: 403, error: "Access denied" };
+  }
+  if (userRole !== "coach" && team.company_id !== companyId) {
+    return { ok: false as const, status: 403, error: "Access denied" };
+  }
+
+  return { ok: true as const, userRole, companyId, team };
+}
+
+// Cached-only getter (used by company admins/owners)
+export async function GET(request: NextRequest) {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
+
+    const url = new URL(request.url);
+    const teamId = url.searchParams.get("teamId");
+    if (!teamId) {
+      return NextResponse.json({ error: "Missing teamId" }, { status: 400 });
+    }
+
+    const authz = await getAuthedTeamAccess(session.user.id, teamId);
+    if (!authz.ok) {
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
+    }
+
+    // Only admin/owner/company view should rely on this cached endpoint
+    if (authz.userRole !== "admin" && authz.userRole !== "owner") {
+      return NextResponse.json({ error: "Access denied" }, { status: 403 });
+    }
+
+    const latestEvalRes = await pool.query(
+      `SELECT id, created_at
+       FROM evaluations
+       WHERE team_id = $1
+       ORDER BY created_at DESC NULLS LAST
+       LIMIT 1`,
+      [teamId]
+    );
+    const latestEvalId =
+      latestEvalRes.rows.length > 0 ? (latestEvalRes.rows[0].id as string) : null;
+
+    const cachedRes = await pool.query(
+      `SELECT report, created_at, source_evaluation_id
+       FROM team_ai_analysis
+       WHERE team_id = $1
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [teamId]
+    );
+    if (cachedRes.rows.length === 0) {
+      return NextResponse.json(
+        {
+          error:
+            "This team does not have an AI report yet. Ask the coach to open Team AI Analysis to generate it.",
+        },
+        { status: 404 }
+      );
+    }
+
+    const cached = cachedRes.rows[0];
+    let cachedReport: any = cached.report;
+    if (typeof cachedReport === "string") {
+      try {
+        cachedReport = JSON.parse(cachedReport);
+      } catch {}
+    }
+    const normalized = normalizeTeamReport(cachedReport) ?? cachedReport;
+    const stale =
+      latestEvalId && cached.source_evaluation_id
+        ? String(cached.source_evaluation_id) !== String(latestEvalId)
+        : false;
+
+    return NextResponse.json(
+      {
+        report: normalized,
+        cached: true,
+        stale,
+        createdAt: cached.created_at,
+        message: stale
+          ? "This team’s AI report is not up to date. Ask the coach to open Team AI Analysis to refresh it."
+          : undefined,
+      },
+      { status: 200 }
+    );
+  } catch (e: any) {
+    console.error("AI team-analysis GET error:", e);
+    return NextResponse.json(
+      { error: "Something went wrong. Please try again." },
+      { status: 500 }
+    );
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const session = await auth();
@@ -358,47 +490,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // AuthZ: staff only, and team must be accessible
-    const userResult = await pool.query(
-      "SELECT role, company_id FROM users WHERE id = $1",
-      [session.user.id]
-    );
-    if (userResult.rows.length === 0) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    const authz = await getAuthedTeamAccess(session.user.id, teamId);
+    if (!authz.ok) {
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
     }
-    const userRole = userResult.rows[0].role as string;
-    let companyId: string | null = userResult.rows[0].company_id;
-
-    if (userRole === "player" || userRole === "parent") {
-      return NextResponse.json({ error: "Access denied" }, { status: 403 });
-    }
-
-    if (userRole === "owner" && !companyId) {
-      const companyResult = await pool.query(
-        "SELECT id FROM companies WHERE owner_id = $1",
-        [session.user.id]
-      );
-      if (companyResult.rows.length > 0) companyId = companyResult.rows[0].id;
-    }
-    if (!companyId) {
-      return NextResponse.json({ error: "Company not found" }, { status: 404 });
-    }
-
-    const teamRes = await pool.query(
-      "SELECT id, name, company_id, coach_id FROM teams WHERE id = $1",
-      [teamId]
-    );
-    if (teamRes.rows.length === 0) {
-      return NextResponse.json({ error: "Team not found" }, { status: 404 });
-    }
-    const team = teamRes.rows[0];
-
-    if (userRole === "coach" && team.coach_id !== session.user.id) {
-      return NextResponse.json({ error: "Access denied" }, { status: 403 });
-    }
-    if (userRole !== "coach" && team.company_id !== companyId) {
-      return NextResponse.json({ error: "Access denied" }, { status: 403 });
-    }
+    const userRole = authz.userRole as string;
+    const companyId = authz.companyId as string;
+    const team = authz.team as any;
 
     // Determine latest evaluation (invalidate cache if new)
     const latestEvalRes = await pool.query(
@@ -429,9 +527,9 @@ export async function POST(request: NextRequest) {
        LIMIT 1`,
       [teamId]
     );
-    if (cachedRes.rows.length > 0) {
-      const cached = cachedRes.rows[0];
-      const cachedSourceEvalId = cached.source_evaluation_id as string;
+    const cachedRow = cachedRes.rows.length > 0 ? cachedRes.rows[0] : null;
+    if (cachedRow) {
+      const cachedSourceEvalId = cachedRow.source_evaluation_id as string;
       if (cachedSourceEvalId === latestEvalId) {
         let cachedReport: any = cached.report;
         if (typeof cachedReport === "string") {
@@ -451,11 +549,44 @@ export async function POST(request: NextRequest) {
           {
             report: normalizedCached ?? cachedReport,
             cached: true,
-            createdAt: cached.created_at,
+            createdAt: cachedRow.created_at,
+            stale: false,
           },
           { status: 200 }
         );
       }
+    }
+
+    // Owners/admins can only VIEW an existing report; they must not generate.
+    if (userRole === "owner" || userRole === "admin") {
+      if (cachedRow) {
+        let cachedReport: any = cachedRow.report;
+        if (typeof cachedReport === "string") {
+          try {
+            cachedReport = JSON.parse(cachedReport);
+          } catch {}
+        }
+        const normalized = normalizeTeamReport(cachedReport) ?? cachedReport;
+        return NextResponse.json(
+          {
+            report: normalized,
+            cached: true,
+            stale: true,
+            createdAt: cachedRow.created_at,
+            message:
+              "This team’s AI report is not up to date. Ask the coach to open Team AI Analysis to refresh it.",
+          },
+          { status: 200 }
+        );
+      }
+
+      return NextResponse.json(
+        {
+          error:
+            "This team does not have an AI report yet. Ask the coach to open Team AI Analysis to generate it.",
+        },
+        { status: 404 }
+      );
     }
 
     const model = "gpt-5-mini";
