@@ -390,7 +390,10 @@ export async function GET(request: NextRequest) {
 
     const authz = await getAuthedTeamAccess(session.user.id, teamId);
     if (!authz.ok) {
-      return NextResponse.json({ error: authz.error }, { status: authz.status });
+      return NextResponse.json(
+        { error: authz.error },
+        { status: authz.status }
+      );
     }
 
     // Only admin/owner/company view should rely on this cached endpoint
@@ -407,7 +410,9 @@ export async function GET(request: NextRequest) {
       [teamId]
     );
     const latestEvalId =
-      latestEvalRes.rows.length > 0 ? (latestEvalRes.rows[0].id as string) : null;
+      latestEvalRes.rows.length > 0
+        ? (latestEvalRes.rows[0].id as string)
+        : null;
 
     const cachedRes = await pool.query(
       `SELECT report, created_at, source_evaluation_id
@@ -492,7 +497,10 @@ export async function POST(request: NextRequest) {
 
     const authz = await getAuthedTeamAccess(session.user.id, teamId);
     if (!authz.ok) {
-      return NextResponse.json({ error: authz.error }, { status: authz.status });
+      return NextResponse.json(
+        { error: authz.error },
+        { status: authz.status }
+      );
     }
     const userRole = authz.userRole as string;
     const companyId = authz.companyId as string;
@@ -531,7 +539,7 @@ export async function POST(request: NextRequest) {
     if (cachedRow) {
       const cachedSourceEvalId = cachedRow.source_evaluation_id as string;
       if (cachedSourceEvalId === latestEvalId) {
-        let cachedReport: any = cached.report;
+        let cachedReport: any = cachedRow.report;
         if (typeof cachedReport === "string") {
           try {
             cachedReport = JSON.parse(cachedReport);
