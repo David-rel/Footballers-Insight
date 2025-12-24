@@ -87,12 +87,12 @@ export default function Sidebar({
   function aiLabelForRole(role: string | null) {
     if (role === "coach") return "Team AI Analysis";
     if (role === "owner" || role === "admin") return "Company AI Analysis";
-    if (role === "player" || role === "parent") return "Player Analysis";
+    if (role === "player" || role === "parent") return "Player AI Analysis";
     return "AI Analysis";
   }
 
   function sessionPlansLabelForRole(role: string | null) {
-    if (role === "coach") return "Session Plans";
+    if (role === "coach") return "Session Plan Generator";
     if (role === "player" || role === "parent") return "Activity Generator";
     if (role === "owner" || role === "admin") return "Sessions & Activities";
     return "Sessions & Activities";
